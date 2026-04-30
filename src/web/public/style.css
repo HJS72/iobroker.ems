@@ -313,6 +313,21 @@ main {
     padding-bottom: 40px;
 }
 
+/* ─── Energy Flow ────────────────────────────────────────────── */
+.energy-flow {
+    width: 100%;
+    max-width: 840px;
+    margin: 0 auto;
+    aspect-ratio: 820 / 490;
+}
+.flow-svg { width: 100%; height: auto; }
+.flow-node-label { font-size: 11px; font-weight: 600; }
+.flow-node-value { font-size: 11px; font-weight: 500; }
+.flow-label { font-size: 10px; font-weight: 700; }
+.flow-path {
+    transition: stroke-width 0.3s ease;
+}
+
 @media (max-width: 768px) {
     header { flex-wrap: wrap; }
     .cards { grid-template-columns: repeat(2, 1fr); }
@@ -391,3 +406,59 @@ main {
 .nav-link.active { color: var(--accent, #4fc3f7); font-weight: 600; background: var(--bg-secondary, #2a2d3a); }
 .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 .nav-divider { height: 1px; background: var(--border, #2a2d3a); margin: 8px 0; }
+
+/* ─── Update ─────────────────────────────────────────────────── */
+.update-badge {
+    background: #ef4444; color: #fff; font-size: 11px; font-weight: 700;
+    min-width: 18px; height: 18px; border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: auto; padding: 0 5px;
+}
+.update-dot {
+    color: #ef4444; font-size: 10px; cursor: pointer;
+    animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.update-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none;
+    transition: opacity 0.3s; display: flex; align-items: center; justify-content: center;
+}
+.update-overlay.open { opacity: 1; pointer-events: auto; }
+
+.update-panel {
+    background: var(--bg-card, #1a1d2e); border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5); width: 90%; max-width: 440px;
+    transform: scale(0.95); transition: transform 0.3s;
+}
+.update-overlay.open .update-panel { transform: scale(1); }
+
+.update-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border, #2a2d3a);
+    font-size: 16px; font-weight: 600; color: var(--text-primary, #e0e0e0);
+}
+.update-body { padding: 16px 20px; font-size: 13px; color: var(--text-secondary, #aaa); }
+.update-info { margin-bottom: 12px; line-height: 1.8; }
+.update-commits { max-height: 200px; overflow-y: auto; }
+.update-commit {
+    padding: 4px 8px; font-family: monospace; font-size: 12px;
+    border-left: 2px solid #4fc3f7; margin-bottom: 4px;
+    background: var(--bg-secondary, #2a2d3a); border-radius: 0 4px 4px 0;
+}
+.update-actions { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border, #2a2d3a); }
+.btn-update {
+    flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer;
+    background: #22c55e; color: #fff; font-weight: 600; font-size: 14px;
+    transition: background 0.2s;
+}
+.btn-update:hover { background: #16a34a; }
+.btn-update:disabled { background: #555; cursor: wait; }
+.btn-cancel {
+    padding: 10px 16px; border: 1px solid var(--border, #2a2d3a); border-radius: 6px;
+    background: none; color: var(--text-secondary, #aaa); cursor: pointer; font-size: 14px;
+}
+.btn-cancel:hover { background: var(--bg-secondary, #2a2d3a); }
+.update-success { color: #22c55e; font-size: 14px; text-align: center; padding: 12px 0; }
+.update-error { color: #ef4444; font-size: 13px; padding: 8px 0; }

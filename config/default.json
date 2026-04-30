@@ -23,7 +23,7 @@
         "dailyYield": "modbus.0.holdingRegisters.40094_I_AC_Energie_WH",
         "dcPower": "modbus.0.holdingRegisters.40101_I_DC_Leistung",
         "batteryPower": "modbus.0.holdingRegisters.57716_Batterieleistung",
-        "batterySoc": "modbus.0.holdingRegisters.57756_Batterieladung"
+        "batterySoc": "modbus.0.holdingRegisters.102853_Batterieladung"
       }
     },
     {

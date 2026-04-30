@@ -2,6 +2,9 @@
 
 const express = require('express');
 const path = require('path');
+const { execSync, spawn } = require('child_process');
+
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 /**
  * Web-Server für das EMS Dashboard.
@@ -185,6 +188,49 @@ function createWebServer(energyManager, port) {
     const server = app.listen(port, () => {
         console.log(`[Web] Dashboard: http://localhost:${port}`);
         console.log(`[Web] Konfiguration: http://localhost:${port}/config.html`);
+    });
+
+    // ─── Update Check & Apply ─────────────────────────────────────────
+
+    app.get('/api/update/check', (req, res) => {
+        try {
+            execSync('git fetch', { cwd: PROJECT_ROOT, timeout: 15000, stdio: 'pipe' });
+            const localHash = execSync('git rev-parse HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+            const remoteHash = execSync('git rev-parse @{u}', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+            const behind = parseInt(execSync('git rev-list HEAD..@{u} --count', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim(), 10);
+            let commitLog = '';
+            if (behind > 0) {
+                commitLog = execSync('git log HEAD..@{u} --oneline --no-decorate -n 10', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+            }
+            res.json({ updateAvailable: behind > 0, behind, localHash: localHash.slice(0, 7), remoteHash: remoteHash.slice(0, 7), commits: commitLog });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.post('/api/update/apply', (req, res) => {
+        try {
+            const pullOutput = execSync('git pull --ff-only', { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 30000 });
+            console.log('[Update] git pull:', pullOutput.trim());
+            const npmOutput = execSync('npm install --omit=dev', { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 60000 });
+            console.log('[Update] npm install done');
+            res.json({ success: true, message: 'Update erfolgreich. Server startet neu...' });
+            // Neustart nach kurzer Verzögerung
+            setTimeout(() => {
+                console.log('[Update] Starte Server neu...');
+                const child = spawn(process.argv[0], process.argv.slice(1), {
+                    cwd: PROJECT_ROOT,
+                    detached: true,
+                    stdio: 'ignore',
+                    env: { ...process.env }
+                });
+                child.unref();
+                process.exit(0);
+            }, 1000);
+        } catch (err) {
+            console.error('[Update] Fehler:', err.message);
+            res.status(500).json({ success: false, error: err.message });
+        }
     });
 
     return server;

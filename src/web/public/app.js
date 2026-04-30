@@ -28,6 +28,7 @@ async function loadCurrentData() {
         const data = await res.json();
         updateConnectionStatus(data.connected);
         updatePowerCards(data);
+        updateEnergyFlow(data);
         updateLastUpdate(data.timestamp);
     } catch (e) {
         updateConnectionStatus(false);
@@ -344,4 +345,241 @@ function updateGridChart(data) {
             }
         }
     });
+}
+
+// ─── Energiefluss-Diagramm ────────────────────────────────────────
+
+function updateEnergyFlow(data) {
+    const container = document.getElementById('energy-flow');
+    if (!container || !appConfig) return;
+
+    // ── Daten sammeln ──
+    const pvSystems = [];
+    let pvTotal = 0;
+    let batteryPower = 0;
+    let batterySoc = null;
+    let hasBattery = false;
+
+    for (const pv of appConfig.pvSystems) {
+        const sys = data.systems?.[pv.id];
+        const power = sys?.power || 0;
+        pvSystems.push({ id: pv.id, name: pv.name, power, hasBattery: pv.hasBattery });
+        pvTotal += power;
+        if (pv.hasBattery && sys?.extra) {
+            hasBattery = true;
+            batteryPower = sys.extra.batteryAcPower || 0;
+            batterySoc = sys.extra.batterySoc;
+        }
+    }
+
+    const gridSys = data.systems?.grid;
+    const gridPower = gridSys?.power || 0;
+    const feedIn = Math.max(0, -gridPower);
+    const purchase = Math.max(0, gridPower);
+
+    // Alle Verbraucher inkl. Auto über Haus – Wallbox ans Ende
+    let carExtra = null;
+    const houseConsumers = [];
+    let houseTotalPower = 0;
+    for (const c of appConfig.consumers) {
+        const sys = data.systems?.[c.id];
+        const power = sys?.power || 0;
+        if (c.id === 'wallbox') carExtra = sys?.extra;
+        houseConsumers.push({ id: c.id, name: c.name, power });
+        houseTotalPower += power;
+    }
+    // Hausverbrauch an den Anfang, Wallbox ans Ende
+    const hIdx = houseConsumers.findIndex(c => c.id === 'house');
+    if (hIdx > 0) houseConsumers.unshift(houseConsumers.splice(hIdx, 1)[0]);
+    const wbIdx = houseConsumers.findIndex(c => c.id === 'wallbox');
+    if (wbIdx >= 0) houseConsumers.push(houseConsumers.splice(wbIdx, 1)[0]);
+
+    const batteryCharging = batteryPower < 0;
+    const batteryDischarging = batteryPower > 0;
+    const batteryAbsPower = Math.abs(batteryPower);
+
+    // ── Layout (orthogonal) ──
+    const W = 820, H = 490;
+    // SVG-Icon-Pfade (Lucide-style, 24x24 viewBox)
+    const svgIcons = {
+        sun: '<path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+        battery: '<rect x="6" y="7" width="12" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><line x1="10" y1="4" x2="10" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="4" x2="14" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+        house: '<path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 21V14h6v7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        grid: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        car: '<path d="M5 17h14M7.5 17l1-5h7l1 5M6 12l1.5-4h9L18 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="17" r="1" fill="currentColor"/><circle cx="16" cy="17" r="1" fill="currentColor"/>',
+        heatpump: '<path d="M12 3v18M3 12h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8a5.7 5.7 0 008 0M8 16a5.7 5.7 0 018 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+        snowflake: '<path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 5l-2 2 2 2m0-4l2 2-2 2m0 6l-2 2 2 2m0-4l2 2-2 2M5 12l2-2 2 2m-4 0l2 2-2 2m10 0l2-2 2 2m-4 0l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
+        washer: '<rect x="4" y="2" width="16" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="5" r="1" fill="currentColor"/>',
+        dryer: '<rect x="4" y="2" width="16" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 11c2 1 2 3 4 4m-1-5c2 1 2 3 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="5" r="1" fill="currentColor"/>',
+        gear: '<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+    };
+    const typeIconMap = { bwwp: 'heatpump', klima: 'snowflake', house: 'house', wm1: 'washer', tr1: 'dryer' };
+
+    // Knotenpositionen – PV links + mitte, Akku unter Solaredge
+    const pv1 = { x: 130, y: 60 };   // Solaredge links
+    const pv2 = { x: 390, y: 60 };   // Hoymiles mitte
+    const houseXY = { x: 390, y: 210 };
+    const houseR = 52;
+    const batXY = { x: 130, y: 210 }; // Batterie unter PV1
+    const gridXY = { x: 250, y: 400 };
+    // carXY entfernt – Auto ist jetzt Verbraucher über Haus
+
+    // Verbraucher rechts gestapelt (ohne Auto) – mehr Abstand
+    const cX = 680;
+    const cSpacing = Math.min(75, (H - 80) / Math.max(houseConsumers.length, 1));
+    const cStartY = houseXY.y - ((houseConsumers.length - 1) * cSpacing) / 2;
+
+    // ── SVG Start ──
+    let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" class="flow-svg">`;
+
+    // Defs
+    svg += `<defs>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <marker id="arrow-green" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#3dd68c"/></marker>
+        <marker id="arrow-red" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f74f4f"/></marker>
+        <marker id="arrow-yellow" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7c948"/></marker>
+        <marker id="arrow-orange" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#ff8c42"/></marker>
+        <marker id="arrow-bat" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#22c55e"/></marker>
+        <marker id="arrow-consumer" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7a94f"/></marker>
+        <marker id="arrow-teal" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
+        <marker id="arrow-car" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
+    </defs>`;
+
+    // ── Orthogonale Fluss-Linie ──
+    // waypoints: Array von [x,y] Koordinaten
+    // Farbe → Arrow-Marker-ID Mapping
+    const arrowMarkers = { '#f7c948': 'arrow-yellow', '#ff8c42': 'arrow-orange', '#22c55e': 'arrow-bat', '#3dd68c': 'arrow-green', '#f74f4f': 'arrow-red', '#f7a94f': 'arrow-consumer', '#10b981': 'arrow-car' };
+
+    function flowLine(waypoints, power, color, labelAtEnd) {
+        if (power <= 0) return '';
+        const thick = Math.max(1.5, Math.min(8, power / 600));
+        const op = Math.max(0.4, Math.min(0.9, power / 3000));
+        let d = `M${waypoints[0][0]},${waypoints[0][1]}`;
+        for (let i = 1; i < waypoints.length; i++) {
+            d += ` L${waypoints[i][0]},${waypoints[i][1]}`;
+        }
+        const markerId = arrowMarkers[color] || 'arrow-yellow';
+        const dashLen = 8 + thick * 2;
+        const gap = dashLen * 0.8;
+        const speed = Math.max(0.4, 2 - power / 3000); // schneller bei mehr Leistung
+        let s = `<path d="${d}" stroke="${color}" stroke-width="${thick}" fill="none" opacity="${op * 0.3}" stroke-linecap="round" stroke-linejoin="round"/>`;
+        s += `<path d="${d}" stroke="${color}" stroke-width="${thick}" fill="none" opacity="${op}" marker-end="url(#${markerId})" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${dashLen} ${gap}"><animate attributeName="stroke-dashoffset" from="${dashLen + gap}" to="0" dur="${speed}s" repeatCount="indefinite"/></path>`;
+        // Label-Position: am letzten Segment (labelAtEnd) oder am Mittelsegment
+        const li = labelAtEnd ? waypoints.length - 1 : Math.floor(waypoints.length / 2);
+        const lx = (waypoints[li - 1][0] + waypoints[li][0]) / 2;
+        const ly = (waypoints[li - 1][1] + waypoints[li][1]) / 2;
+        const isVert = waypoints[li - 1][0] === waypoints[li][0];
+        s += `<text x="${lx + (isVert ? 10 : 0)}" y="${ly + (isVert ? 0 : -8)}" text-anchor="${isVert ? 'start' : 'middle'}" class="flow-label" fill="${color}">${formatPower(power)}</text>`;
+        return s;
+    }
+
+    // ── Flüsse berechnen & zeichnen ──
+    const busX = 390; // Vertikale Bus-Linie (= Haus x)
+    const pvBusY = 105; // Horizontale PV-Sammellinie
+
+    // PV1 → Haus (Solaredge links, runter zum Bus, rüber zu Haus)
+    const pv1Power = pvSystems[0]?.power || 0;
+    if (pv1Power > 0) {
+        svg += flowLine([[pv1.x, pv1.y + 26], [pv1.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv1Power, '#f7c948');
+    }
+
+    // PV2 → Haus (Hoymiles mitte, direkt runter)
+    const pv2Power = pvSystems[1]?.power || 0;
+    if (pv2Power > 0) {
+        svg += flowLine([[pv2.x, pv2.y + 26], [pv2.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv2Power, '#ff8c42');
+    }
+
+    // Batterie ← PV (laden): von PV1 runter zur Batterie
+    if (hasBattery && batteryCharging) {
+        svg += flowLine([[pv1.x, pvBusY], [pv1.x, batXY.y - 28]], batteryAbsPower, '#22c55e');
+    }
+    // Batterie → Haus (entladen): Batterie rüber zu Haus
+    if (hasBattery && batteryDischarging) {
+        svg += flowLine([[batXY.x + 28, batXY.y], [busX - houseR, houseXY.y]], batteryAbsPower, '#22c55e');
+    }
+
+    // Haus → Netz (Einspeisung)
+    if (feedIn > 0) {
+        svg += flowLine([[houseXY.x, houseXY.y + houseR], [houseXY.x, 340], [gridXY.x, 340], [gridXY.x, gridXY.y - 26]], feedIn, '#3dd68c');
+    }
+
+    // Netz → Haus (Bezug)
+    if (purchase > 0) {
+        svg += flowLine([[gridXY.x, gridXY.y - 26], [gridXY.x, 340], [houseXY.x, 340], [houseXY.x, houseXY.y + houseR]], purchase, '#f74f4f');
+    }
+
+    // Haus → Verbraucher (orthogonal rechts)
+    const cBusX = 560;
+    houseConsumers.forEach((c, i) => {
+        if (c.power > 0) {
+            const cy = cStartY + i * cSpacing;
+            const lineColor = c.id === 'wallbox' ? '#10b981' : '#f7a94f';
+            svg += flowLine([[houseXY.x + houseR, houseXY.y], [cBusX, houseXY.y], [cBusX, cy], [cX - 24, cy]], c.power, lineColor, true);
+        }
+    });
+
+
+
+    // ── Knoten zeichnen ──
+    // labelPos: 'top' | 'bottom' | 'left' | 'right' – Beschriftung gegenüber dem Energiefluss
+    function drawNode(x, y, r, iconKey, label, value, color, active, fontSize, labelPos) {
+        const iconSize = r * 1.4;
+        const svgIcon = svgIcons[iconKey] || svgIcons.gear;
+        let s = `<g>`;
+        s += `<circle cx="${x}" cy="${y}" r="${r}" fill="transparent" stroke="${color}" stroke-width="${active ? 2.5 : 1}" opacity="${active ? 1 : 0.35}"${active ? ' filter="url(#glow)"' : ''}/>`;
+        s += `<g transform="translate(${x - iconSize / 2},${y - iconSize / 2})" color="${color}" opacity="${active ? 1 : 0.4}"><svg viewBox="0 0 24 24" width="${iconSize}" height="${iconSize}">${svgIcon}</svg></g>`;
+        let lx, ly, vx, vy, anchor;
+        switch (labelPos) {
+            case 'top':
+                lx = x; ly = y - r - 22; vx = x; vy = y - r - 8; anchor = 'middle'; break;
+            case 'left':
+                lx = x - r - 8; ly = y - 4; vx = x - r - 8; vy = y + 10; anchor = 'end'; break;
+            case 'right':
+                lx = x + r + 8; ly = y - 4; vx = x + r + 8; vy = y + 10; anchor = 'start'; break;
+            default: // bottom
+                lx = x; ly = y + r + 13; vx = x; vy = y + r + 26; anchor = 'middle'; break;
+        }
+        s += `<text x="${lx}" y="${ly}" text-anchor="${anchor}" class="flow-node-label" fill="${color}">${label}</text>`;
+        if (active || value > 0) {
+            s += `<text x="${vx}" y="${vy}" text-anchor="${anchor}" class="flow-node-value" fill="#e4e6eb">${formatPower(value)}</text>`;
+        }
+        s += '</g>';
+        return s;
+    }
+
+    // PV1 & PV2 – Fluss geht nach unten → Label oben
+    svg += drawNode(pv1.x, pv1.y, 26, 'sun', pvSystems[0]?.name || 'PV1', pv1Power, '#f7c948', pv1Power > 0, 20, 'top');
+    svg += drawNode(pv2.x, pv2.y, 26, 'sun', pvSystems[1]?.name || 'PV2', pv2Power, '#ff8c42', pv2Power > 0, 20, 'top');
+
+    // Batterie – Fluss geht nach rechts/oben → Label links
+    if (hasBattery) {
+        const batLabel = `Batterie ${batterySoc != null ? batterySoc.toFixed(0) + '%' : ''}`;
+        svg += drawNode(batXY.x, batXY.y, 28, 'battery', batLabel, batteryAbsPower, '#22c55e', batteryAbsPower > 0, 22, 'left');
+    }
+
+    // HAUS (groß) – zentraler Hub → Label unten
+    svg += drawNode(houseXY.x, houseXY.y, houseR, 'house', 'Haus', houseTotalPower, '#4fc3f7', true, 32, 'bottom');
+
+    // Netz – Fluss geht nach oben → Label unten
+    const gridColor = feedIn > 0 ? '#3dd68c' : (purchase > 0 ? '#f74f4f' : '#555');
+    const gridLabel = feedIn > 0 ? 'Einspeisung' : (purchase > 0 ? 'Netzbezug' : 'Netz');
+    svg += drawNode(gridXY.x, gridXY.y, 26, 'grid', gridLabel, Math.abs(gridPower), gridColor, Math.abs(gridPower) > 0, 20, 'bottom');
+
+    // Verbraucher (inkl. Auto) – Fluss kommt von links → Label rechts
+    houseConsumers.forEach((c, i) => {
+        const cy = cStartY + i * cSpacing;
+        let iconKey = typeIconMap[c.id] || 'gear';
+        let label = c.name;
+        let color = c.power > 0 ? '#f7a94f' : '#555';
+        if (c.id === 'wallbox') {
+            iconKey = 'car';
+            const evSoc = carExtra?.evSoc;
+            label = evSoc != null ? `${c.name} ${evSoc}%` : c.name;
+            color = c.power > 0 ? '#10b981' : '#555';
+        }
+        svg += drawNode(cX, cy, 22, iconKey, label, c.power, color, c.power > 0, 16, 'right');
+    });
+
+    svg += '</svg>';
+    container.innerHTML = svg;
 }

@@ -1,0 +1,156 @@
+{
+  "iobroker": {
+    "host": "10.13.30.201",
+    "port": 8087,
+    "protocol": "http"
+  },
+  "location": {
+    "latitude": 48.9408,
+    "longitude": 9.1006
+  },
+  "pvSystems": [
+    {
+      "name": "Solaredge (BYD)",
+      "id": "pv1",
+      "declination": 30,
+      "azimuth": 0,
+      "kwp": 8,
+      "hasBattery": true,
+      "powerSignPositive": "production",
+      "energyType": "total",
+      "datapoints": {
+        "power": "modbus.0.holdingRegisters.40084_I_AC_Leistung",
+        "dailyYield": "modbus.0.holdingRegisters.40094_I_AC_Energie_WH",
+        "dcPower": "modbus.0.holdingRegisters.40101_I_DC_Leistung",
+        "batteryPower": "modbus.0.holdingRegisters.57716_Batterieleistung",
+        "batterySoc": "modbus.0.holdingRegisters.57756_Batterieladung"
+      }
+    },
+    {
+      "name": "Hoymiles",
+      "id": "pv2",
+      "declination": 85,
+      "azimuth": 0,
+      "kwp": 0.6,
+      "hasBattery": false,
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.shellypmminig3#E4B063E0A038#1.PM1:0.Power",
+        "dailyYield": "shelly.0.shellypmminig3#E4B063E0A038#1.PM1:0.Energy"
+      }
+    }
+  ],
+  "consumers": [
+    {
+      "name": "Ochsner",
+      "id": "bwwp",
+      "type": "heatpump",
+      "controlMode": "controllable",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.SHPLG-S#FDD4A3#1.Relay0.Power",
+        "energyTotal": "shelly.0.SHPLG-S#FDD4A3#1.Relay0.Energy",
+        "tempCurrent": "oekofen-json.0.ww1.L_ontemp_act",
+        "tempStart": "javascript.0.EMS.Ochsner.TempStart",
+        "tempEnd": "javascript.0.EMS.Ochsner.TempEnd"
+      },
+      "seasons": [
+        "spring",
+        "summer",
+        "autumn"
+      ]
+    },
+    {
+      "name": "Klimaanlage",
+      "id": "klima",
+      "type": "aircon",
+      "controlMode": "controllable",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.shellyplus1pm#0CDC7EF58390#1.Relay0.Power",
+        "energyTotal": "shelly.0.shellyplus1pm#0CDC7EF58390#1.Relay0.Energy",
+        "tempCurrent": "hm-rpc.1.000313C98CC2FE.1.ACTUAL_TEMPERATURE",
+        "tempStart": "javascript.0.EMS.AC.TempStart",
+        "tempEnd": "javascript.0.EMS.AC.TempEnd"
+      },
+      "seasons": [
+        "summer"
+      ]
+    },
+    {
+      "name": "Hausverbrauch",
+      "id": "house",
+      "type": "house",
+      "controlMode": "none",
+      "powerSignPositive": "consumption",
+      "energyType": "balance",
+      "datapoints": {
+        "power": "",
+        "energyTotal": ""
+      }
+    },
+    {
+      "name": "Zappi",
+      "id": "wallbox",
+      "type": "wallbox",
+      "controlMode": "self_regulating",
+      "powerSignPositive": "consumption",
+      "energyType": "calculated",
+      "datapoints": {
+        "power": "myenergi.0.22407308.ectpSum",
+        "energyTotal": "",
+        "evSoc": "javascript.0.Mercedes.SOC",
+        "evRange": "javascript.0.Mercedes.Range",
+        "evChargeEnd": "javascript.0.Mercedes.EndOfChargeTime",
+        "evBatteryCapacity": "javascript.0.Mercedes.NetCapacity"
+      },
+      "evBatteryCapacity": 19.5
+    },
+    {
+      "name": "Waschmaschine",
+      "id": "wm1",
+      "type": "washer",
+      "controlMode": "recommend_start",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Power",
+        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Energy"
+      }
+    },
+    {
+      "name": "Trockner",
+      "id": "tr1",
+      "type": "dryer",
+      "controlMode": "recommend_start",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Power",
+        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Energy"
+      }
+    }
+  ],
+  "grid": {
+    "name": "Netz",
+    "signConvention": "positive_feedin",
+    "datapoints": {
+      "power": "modbus.0.holdingRegisters.80207_Einspeisung_Leistung",
+      "energyFeedIn": "modbus.0.holdingRegisters.40227_M_Exported",
+      "energyPurchase": "modbus.0.holdingRegisters.40235_M_Imported"
+    }
+  },
+  "holidays": {
+    "datapoint": "feiertage.0.heute.boolean"
+  },
+  "polling": {
+    "intervalMs": 5000,
+    "forecastUpdateMs": 900000
+  },
+  "web": {
+    "port": 3000
+  }
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMS – Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header>
+        <h1>⚡ Energy Management System</h1>
+        <div id="connection-status" class="status offline">Verbinde...</div>
+        <div class="header-actions">
+            <input type="date" id="date-picker">
+            <button id="btn-refresh" title="Prognose aktualisieren">🔄 Prognose</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Aktuelle Leistung -->
+        <section id="current-power" class="card-grid">
+            <h2>Aktuelle Leistung</h2>
+            <div id="power-cards" class="cards"></div>
+        </section>
+
+        <!-- PV-Prognose Chart -->
+        <section class="card">
+            <h2>PV-Prognose (heute)</h2>
+            <div class="chart-container">
+                <canvas id="chart-pv-forecast"></canvas>
+            </div>
+        </section>
+
+        <!-- Verbrauchsprognose Chart -->
+        <section class="card">
+            <h2>Verbrauchsprognose (Stundenraster)</h2>
+            <div class="chart-container">
+                <canvas id="chart-consumption"></canvas>
+            </div>
+        </section>
+
+        <!-- Grid-Bilanz Chart -->
+        <section class="card">
+            <h2>Netz-Bilanz (Einspeisung / Bezug)</h2>
+            <div class="chart-container">
+                <canvas id="chart-grid"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span id="build-version">Version ...</span>
+        <span id="last-update">Letztes Update: --</span>
+    </footer>
+
+    <script src="nav.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

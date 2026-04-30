@@ -1,0 +1,254 @@
+/* ─── Config Page Specific Styles ─────────────────────────────── */
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.form-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+@media (max-width: 768px) {
+    .form-grid.cols-2,
+    .form-grid.cols-3 { grid-template-columns: 1fr; }
+}
+
+.form-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.form-grid label small {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+
+.form-grid input[type="text"],
+.form-grid input[type="number"],
+.form-grid select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.form-grid input:focus,
+.form-grid select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(79, 143, 247, 0.15);
+}
+
+.form-grid input.dp-input {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem;
+    color: var(--orange);
+}
+
+.form-grid input:invalid {
+    border-color: var(--red);
+}
+
+/* Checkbox label */
+.checkbox-label {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 8px !important;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.form-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    grid-column: 1 / -1;
+}
+
+/* ─── System List Items ──────────────────────────────────────── */
+
+.system-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.system-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+    transition: border-color 0.2s;
+}
+
+.system-item:hover {
+    border-color: var(--accent);
+}
+
+.system-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.system-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.system-item h4 {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin: 14px 0 8px;
+    font-weight: 600;
+}
+
+.system-item h3 + .form-grid {
+    margin-top: 8px;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+
+.btn-primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+.btn-secondary {
+    background: var(--border);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-secondary:hover { background: rgba(255,255,255,0.08); }
+
+.btn-add {
+    background: transparent;
+    color: var(--accent);
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    width: 100%;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.btn-add:hover {
+    border-color: var(--accent);
+    background: rgba(79, 143, 247, 0.05);
+}
+
+.btn-remove {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.btn-remove:hover {
+    background: rgba(247, 79, 79, 0.1);
+    border-color: var(--red);
+}
+
+.btn-link {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+}
+
+.btn-link:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
+}
+
+/* ─── Save Status ────────────────────────────────────────────── */
+
+#save-status {
+    transition: opacity 0.3s;
+}
+
+#save-status.success {
+    background: rgba(61, 214, 140, 0.15);
+    color: var(--green);
+}
+
+#save-status.error {
+    background: rgba(247, 79, 79, 0.15);
+    color: var(--red);
+}
+
+#connection-result {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+#connection-result.ok { color: var(--green); }
+#connection-result.fail { color: var(--red); }
+
+/* ─── Battery fields toggle ──────────────────────────────────── */
+
+.battery-fields {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+}
+
+/* ─── Card h3 ────────────────────────────────────────────────── */
+
+.card h3 {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin: 16px 0 10px;
+    font-weight: 600;
+}

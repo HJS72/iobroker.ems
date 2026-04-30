@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMS – Konfiguration</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="config.css">
+</head>
+<body>
+    <header>
+        <h1>⚙️ EMS Konfiguration</h1>
+        <div id="save-status" class="status"></div>
+        <div class="header-actions">
+            <button id="btn-save" class="btn-primary">💾 Speichern</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- ioBroker Verbindung -->
+        <section class="card" id="section-iobroker">
+            <h2>ioBroker Verbindung</h2>
+            <div class="form-grid">
+                <label>Protokoll
+                    <select id="cfg-iobroker-protocol">
+                        <option value="http">HTTP</option>
+                        <option value="https">HTTPS</option>
+                    </select>
+                </label>
+                <label>Host / IP
+                    <input type="text" id="cfg-iobroker-host" placeholder="192.168.1.100">
+                </label>
+                <label>Port
+                    <input type="number" id="cfg-iobroker-port" placeholder="8087" min="1" max="65535">
+                </label>
+                <div class="form-actions">
+                    <button id="btn-test-connection" class="btn-secondary">🔌 Verbindung testen</button>
+                    <span id="connection-result"></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Standort -->
+        <section class="card" id="section-location">
+            <h2>Standort (für PV-Prognose)</h2>
+            <div class="form-grid cols-2">
+                <label>Breitengrad (Latitude)
+                    <input type="number" id="cfg-lat" step="0.0001" min="-90" max="90" placeholder="48.1000">
+                </label>
+                <label>Längengrad (Longitude)
+                    <input type="number" id="cfg-lon" step="0.0001" min="-180" max="180" placeholder="11.6000">
+                </label>
+            </div>
+        </section>
+
+        <!-- PV-Anlagen -->
+        <section class="card" id="section-pv">
+            <h2>PV-Anlagen</h2>
+            <div id="pv-list" class="system-list"></div>
+            <button id="btn-add-pv" class="btn-add">+ PV-Anlage hinzufügen</button>
+        </section>
+
+        <!-- Verbraucher -->
+        <section class="card" id="section-consumers">
+            <h2>Verbraucher</h2>
+            <div id="consumer-list" class="system-list"></div>
+            <button id="btn-add-consumer" class="btn-add">+ Verbraucher hinzufügen</button>
+        </section>
+
+        <!-- Grid -->
+        <section class="card" id="section-grid">
+            <h2>Netz (Grid)</h2>
+            <div class="form-grid cols-3">
+                <label>Name
+                    <input type="text" id="cfg-grid-name" placeholder="Netz">
+                </label>
+                <label>Vorzeichen-Konvention
+                    <select id="cfg-grid-sign">
+                        <option value="positive_purchase">Positiv = Bezug</option>
+                        <option value="positive_feedin">Positiv = Einspeisung</option>
+                    </select>
+                    <small>Was bedeutet ein positiver Wert?</small>
+                </label>
+            </div>
+            <h3>Datenpunkte</h3>
+            <div class="form-grid cols-3">
+                <label>Leistung (W)
+                    <input type="text" id="cfg-grid-dp-power" placeholder="modbus.0.grid.power" class="dp-input">
+                    <small>Vorzeichen bestimmt Richtung (s.o.)</small>
+                </label>
+                <label>Energie Einspeisung (Wh)
+                    <input type="text" id="cfg-grid-dp-energyFeedIn" placeholder="modbus.0.grid.exported" class="dp-input">
+                </label>
+                <label>Energie Bezug (Wh)
+                    <input type="text" id="cfg-grid-dp-energyPurchase" placeholder="modbus.0.grid.imported" class="dp-input">
+                </label>
+            </div>
+        </section>
+
+        <!-- Feiertage -->
+        <section class="card" id="section-holidays">
+            <h2>Feiertage</h2>
+            <div class="form-grid cols-2">
+                <label>Feiertag-Datenpunkt (boolean)
+                    <input type="text" id="cfg-holiday-dp" placeholder="feiertage.0.heute.boolean" class="dp-input">
+                    <small>Feiertage-Adapter: true wenn heute Feiertag</small>
+                </label>
+            </div>
+        </section>
+
+        <!-- Polling / Timing -->
+        <section class="card" id="section-polling">
+            <h2>Abfrage-Intervalle</h2>
+            <div class="form-grid cols-2">
+                <label>Polling-Intervall (Sekunden)
+                    <input type="number" id="cfg-poll-interval" min="5" max="300" step="1" placeholder="10">
+                </label>
+                <label>Prognose-Update (Minuten)
+                    <input type="number" id="cfg-forecast-interval" min="5" max="120" step="1" placeholder="15">
+                </label>
+            </div>
+        </section>
+
+        <!-- Web-Server -->
+        <section class="card" id="section-web">
+            <h2>Web-Server</h2>
+            <div class="form-grid cols-2">
+                <label>Port
+                    <input type="number" id="cfg-web-port" min="1" max="65535" placeholder="3000">
+                </label>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span id="build-version">Version ...</span>
+        <span>Änderungen erfordern einen Neustart</span>
+    </footer>
+
+    <!-- Templates für dynamische Listen -->
+    <template id="tpl-pv">
+        <div class="system-item" data-index="">
+            <div class="system-header">
+                <span class="system-title"></span>
+                <button class="btn-remove" title="Entfernen">✕</button>
+            </div>
+            <div class="form-grid cols-3">
+                <label>Name
+                    <input type="text" data-field="name" placeholder="PV-Anlage 1">
+                </label>
+                <label>ID (intern)
+                    <input type="text" data-field="id" placeholder="pv1" pattern="[a-z0-9_]+">
+                </label>
+                <label>Leistung (kWp)
+                    <input type="number" data-field="kwp" step="0.1" min="0.1" placeholder="10.0">
+                </label>
+                <label>Neigung (°)
+                    <input type="number" data-field="declination" min="0" max="90" placeholder="30">
+                </label>
+                <label>Azimut (°)
+                    <input type="number" data-field="azimuth" min="-180" max="180" placeholder="0">
+                    <small>-180=N, -90=O, 0=S, 90=W</small>
+                </label>
+                <label>Vorzeichen Leistung
+                    <select data-field="powerSignPositive">
+                        <option value="production">Positiv = Erzeugung</option>
+                        <option value="consumption">Positiv = Verbrauch (invertieren)</option>
+                    </select>
+                    <small>Was bedeutet ein positiver Wert im Datenpunkt?</small>
+                </label>
+                <label>Energie-Datenpunkt Typ
+                    <select data-field="energyType">
+                        <option value="total">Summenzähler (kumulativ)</option>
+                        <option value="daily">Tagesertrag (wird täglich zurückgesetzt)</option>
+                        <option value="calculated">Berechnet (aus Leistung)</option>
+                    </select>
+                    <small>Berechnet: kein Energiezähler, Energie wird aus Leistung integriert</small>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" data-field="hasBattery">
+                    <span>Hat Batteriespeicher</span>
+                </label>
+            </div>
+            <h4>Datenpunkte</h4>
+            <div class="form-grid cols-2">
+                <label>Leistung (W)
+                    <input type="text" data-dp="power" placeholder="alias.0.pv1.power" class="dp-input">
+                </label>
+                <label>Ertrag / Energie (kWh)
+                    <input type="text" data-dp="dailyYield" placeholder="alias.0.pv1.energy_total" class="dp-input">
+                    <small>Summenzähler oder Tageszähler (je nach Typ oben)</small>
+                </label>
+            </div>
+            <div class="battery-fields" style="display:none">
+                <div class="form-grid cols-3">
+                    <label>DC-Leistung PV (W)
+                        <input type="text" data-dp="dcPower" placeholder="modbus.0.pv.dc_power" class="dp-input">
+                        <small>Reiner PV-Ertrag (DC-Seite, vor Batterie)</small>
+                    </label>
+                    <label>Batterie Leistung DC (W)
+                        <input type="text" data-dp="batteryPower" placeholder="modbus.0.pv.battery_power" class="dp-input">
+                        <small>+Laden / -Entladen (DC)</small>
+                    </label>
+                    <label>Batterie SoC (%)
+                        <input type="text" data-dp="batterySoc" placeholder="modbus.0.pv.battery_soc" class="dp-input">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tpl-consumer">
+        <div class="system-item" data-index="">
+            <div class="system-header">
+                <span class="system-title"></span>
+                <button class="btn-remove" title="Entfernen">✕</button>
+            </div>
+            <div class="form-grid cols-3">
+                <label>Name
+                    <input type="text" data-field="name" placeholder="Verbraucher">
+                </label>
+                <label>ID (intern)
+                    <input type="text" data-field="id" placeholder="device1" pattern="[a-z0-9_]+">
+                </label>
+                <label>Typ
+                    <select data-field="type">
+                        <option value="house">Hausverbrauch</option>
+                        <option value="heatpump">Wärmepumpe</option>
+                        <option value="aircon">Klimaanlage</option>
+                        <option value="wallbox">Wallbox</option>
+                        <option value="washer">Waschmaschine</option>
+                        <option value="dryer">Trockner</option>
+                        <option value="other">Sonstiges</option>
+                    </select>
+                </label>
+                <label>Steuerungsmodus
+                    <select data-field="controlMode">
+                        <option value="none">Nicht gesteuert</option>
+                        <option value="controllable">Aktiv steuerbar (EIN/AUS)</option>
+                        <option value="self_regulating">Selbstregelnd (Wallbox)</option>
+                        <option value="recommend_start">Startzeit-Empfehlung</option>
+                    </select>
+                    <small>Wie wird das Gerät im Fahrplan behandelt?</small>
+                </label>
+                <label>Vorzeichen Leistung
+                    <select data-field="powerSignPositive">
+                        <option value="consumption">Positiv = Verbrauch</option>
+                        <option value="production">Positiv = Erzeugung (invertieren)</option>
+                    </select>
+                    <small>Was bedeutet ein positiver Wert im Datenpunkt?</small>
+                </label>
+                <label>Energie-Datenpunkt Typ
+                    <select data-field="energyType">
+                        <option value="total">Summenzähler (kumulativ)</option>
+                        <option value="daily">Tagesverbrauch (wird täglich zurückgesetzt)</option>
+                        <option value="calculated">Berechnet (aus Leistung)</option>
+                        <option value="balance">Bilanz (Restverbrauch aus PV + Netz - Verbraucher)</option>
+                    </select>
+                    <small>Bilanz: Leistung &amp; Energie werden automatisch berechnet, keine Datenpunkte nötig</small>
+                </label>
+            </div>
+            <div class="form-grid cols-4">
+                <label>Aktive Jahreszeiten</label>
+                <label class="checkbox-label">
+                    <input type="checkbox" data-season="winter">
+                    <span>Winter</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" data-season="spring">
+                    <span>Frühling</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" data-season="summer">
+                    <span>Sommer</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" data-season="autumn">
+                    <span>Herbst</span>
+                </label>
+                <small>Keine Auswahl = immer aktiv</small>
+            </div>
+            <h4>Datenpunkte</h4>
+            <div class="form-grid cols-2">
+                <label>Leistung (W)
+                    <input type="text" data-dp="power" placeholder="alias.0.device.power" class="dp-input">
+                </label>
+                <label>Energie (kWh)
+                    <input type="text" data-dp="energyTotal" placeholder="alias.0.device.energy_total" class="dp-input">
+                    <small>Summenzähler oder Tageszähler (je nach Typ oben)</small>
+                </label>
+            </div>
+            <div class="ev-fields" style="display:none">
+                <h4>Elektrofahrzeug</h4>
+                <div class="form-grid cols-2">
+                    <label>SOC / Ladezustand (%)
+                        <input type="text" data-dp="evSoc" placeholder="mercedesme.0.VIN.state.soc.displayValue" class="dp-input">
+                    </label>
+                    <label>Reichweite (km)
+                        <input type="text" data-dp="evRange" placeholder="mercedesme.0.VIN.state.rangeelectric.displayValue" class="dp-input">
+                    </label>
+                    <label>Ladeende
+                        <input type="text" data-dp="evChargeEnd" placeholder="mercedesme.0.VIN.state.endofchargetime.displayValue" class="dp-input">
+                    </label>
+                    <label>Batterie-Kapazität DP (kWh)
+                        <input type="text" data-dp="evBatteryCapacity" placeholder="mercedesme.0.VIN.state.capacity" class="dp-input">
+                        <small>Optional: Datenpunkt für Kapazität</small>
+                    </label>
+                    <label>Batterie-Kapazität Festwert (kWh)
+                        <input type="number" data-field="evBatteryCapacity" step="0.1" min="0" placeholder="66.5">
+                        <small>Fallback wenn kein DP verfügbar</small>
+                    </label>
+                </div>
+            </div>
+            <div class="hp-fields" style="display:none">
+                <h4>Temperatursteuerung</h4>
+                <div class="form-grid cols-3">
+                    <label>Aktuelle Temperatur (°C)
+                        <input type="text" data-dp="tempCurrent" placeholder="oekofen-json.0.ww1.L_ontemp_act" class="dp-input">
+                        <small>Ist-Temperatur (z.B. Warmwasser)</small>
+                    </label>
+                    <label>Start-Temperatur (°C)
+                        <input type="text" data-dp="tempStart" placeholder="javascript.0.EMS.device.TempStart" class="dp-input">
+                        <small>WP: unter diesem Wert starten / AC: über diesem Wert kühlen</small>
+                    </label>
+                    <label>End-Temperatur (°C)
+                        <input type="text" data-dp="tempEnd" placeholder="javascript.0.EMS.device.TempEnd" class="dp-input">
+                        <small>WP: Zieltemperatur (oben) / AC: Zieltemperatur (unten)</small>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="nav.js"></script>
+    <script src="config.js"></script>
+</body>
+</html>

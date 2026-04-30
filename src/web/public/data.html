@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMS – Daten</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>⚡ Daten</h1>
+        <div id="connection-status" class="status offline">Verbinde...</div>
+        <div class="header-actions">
+            <input type="date" id="date-picker">
+            <button id="btn-refresh" title="Prognose aktualisieren">🔄 Prognose</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Stündliche Tabelle -->
+        <section class="card">
+            <h2>Stundenraster – Detailübersicht</h2>
+            <div class="table-scroll">
+                <table id="hourly-table">
+                    <thead>
+                        <tr id="hourly-header"></tr>
+                    </thead>
+                    <tbody id="hourly-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span id="build-version">Version ...</span>
+        <span id="last-update">Letztes Update: --</span>
+    </footer>
+
+    <script src="nav.js"></script>
+    <script src="data.js"></script>
+</body>
+</html>

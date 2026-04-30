@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMS – Tagesübersicht</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>⚡ Tagesübersicht</h1>
+        <div id="connection-status" class="status offline">Verbinde...</div>
+        <div class="header-actions">
+            <input type="date" id="date-picker">
+            <button id="btn-refresh" title="Prognose aktualisieren">🔄 Prognose</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tagesübersicht -->
+        <section class="card">
+            <h2>Tagesübersicht</h2>
+            <div id="daily-summary" class="summary-grid"></div>
+        </section>
+
+        <!-- Verbraucher-Priorisierung -->
+        <section class="card">
+            <h2>⚡ Verbraucher-Priorisierung</h2>
+            <div id="priority-list" class="priority-grid"></div>
+        </section>
+
+        <!-- Tagesfahrplan -->
+        <section class="card">
+            <h2>📋 Tagesfahrplan</h2>
+            <div id="schedule-summary" class="summary-grid"></div>
+            <div id="schedule-timeline" class="schedule-timeline"></div>
+            <div id="schedule-devices" class="schedule-devices"></div>
+        </section>
+    </main>
+
+    <footer>
+        <span id="build-version">Version ...</span>
+        <span id="last-update">Letztes Update: --</span>
+    </footer>
+
+    <script src="nav.js"></script>
+    <script src="daily.js"></script>
+</body>
+</html>

@@ -2,7 +2,68 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { execSync, spawn } = require('child_process');
+const fetch = require('node-fetch');
+const cfgModule = require('../config');
+
+function getUpdateConfig() {
+    try {
+        const cfg = cfgModule.get();
+        return cfg.update || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function getLocalVersion() {
+    // Prefer build env var, fallback to package.json
+    if (process.env.EMS_BUILD_VERSION && process.env.EMS_BUILD_VERSION.length > 0) return process.env.EMS_BUILD_VERSION;
+    try {
+        const p = require(path.join(PROJECT_ROOT, 'package.json'));
+        return p.version || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function parseGithubOwnerRepo(url) {
+    // Accept forms: https://github.com/owner/repo(.git), git@github.com:owner/repo.git
+    try {
+        let owner = null; let repo = null;
+        if (url.startsWith('git@')) {
+            // git@github.com:owner/repo.git
+            const m = url.match(/^git@[^:]+:([^/]+)\/(.+?)(\.git)?$/);
+            if (m) { owner = m[1]; repo = m[2]; }
+        } else {
+            const u = new URL(url);
+            if (u.hostname.endsWith('github.com')) {
+                const parts = u.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/');
+                if (parts.length >= 2) { owner = parts[0]; repo = parts[1]; }
+            }
+        }
+        if (owner && repo) return { owner, repo };
+    } catch (e) {}
+    return null;
+}
+
+function normalizeVersion(v) {
+    if (!v) return v;
+    return String(v).replace(/^v/i, '');
+}
+
+function buildGitEnv(updateCfg) {
+    const env = { ...process.env };
+    if (!updateCfg) return env;
+    if (updateCfg.sshCommand && updateCfg.sshCommand.length > 0) {
+        env.GIT_SSH_COMMAND = updateCfg.sshCommand;
+    } else if (updateCfg.sshKey && updateCfg.sshKey.length > 0) {
+        const sshOptions = updateCfg.sshOptions || '-o IdentitiesOnly=yes -o StrictHostKeyChecking=no';
+        env.GIT_SSH_COMMAND = `ssh -i ${updateCfg.sshKey} ${sshOptions}`;
+    }
+    return env;
+}
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -192,37 +253,195 @@ function createWebServer(energyManager, port) {
 
     // ─── Update Check & Apply ─────────────────────────────────────────
 
-    app.get('/api/update/check', (req, res) => {
+    app.get('/api/update/check', async (req, res) => {
         try {
-            execSync('git fetch', { cwd: PROJECT_ROOT, timeout: 15000, stdio: 'pipe' });
-            const localHash = execSync('git rev-parse HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
-            const remoteHash = execSync('git rev-parse @{u}', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
-            const behind = parseInt(execSync('git rev-list HEAD..@{u} --count', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim(), 10);
+            const updateCfg = getUpdateConfig();
+            if (updateCfg.enabled === false) return res.json({ enabled: false, updateAvailable: false });
+
+            // Allow overriding repository via query param `url`
+            const repoUrl = req.query.url || updateCfg.repoUrl || null;
+            const localVersion = getLocalVersion();
+
+            if (repoUrl && repoUrl.includes('github.com')) {
+                // Check GitHub latest release
+                const parsed = parseGithubOwnerRepo(repoUrl);
+                if (!parsed) return res.status(400).json({ error: 'Ungültige GitHub-URL' });
+                const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
+                const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
+                if (!r.ok) throw new Error(`GitHub API Fehler: ${r.status} ${r.statusText}`);
+                const json = await r.json();
+                const remoteVersion = json.tag_name || json.name || null;
+                const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
+                const tarball = json.tarball_url || json.zipball_url || assetUrl;
+                const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
+                return res.json({ enabled: true, updateAvailable, localVersion, remoteVersion, downloadUrl: tarball, repo: `${parsed.owner}/${parsed.repo}`, releaseName: json.name || '' });
+            }
+
+            // Fallback: legacy git remote-based check
+            const env = buildGitEnv(updateCfg);
+
+            execSync('git fetch', { cwd: PROJECT_ROOT, timeout: 15000, stdio: 'pipe', env });
+            const localHash = execSync('git rev-parse HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+
+            // determine branch / upstream
+            let branch = updateCfg.branch;
+            if (!branch || branch.length === 0) {
+                branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+            }
+            const remote = updateCfg.remote || 'origin';
+            const upstreamRef = `${remote}/${branch}`;
+
+            // try to resolve remote hash / behind count
+            let remoteHash = '';
+            let behind = 0;
+            try {
+                remoteHash = execSync(`git rev-parse ${upstreamRef}`, { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+                behind = parseInt(execSync(`git rev-list HEAD..${upstreamRef} --count`, { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim(), 10);
+            } catch (e) {
+                // fallback to @{u} if configured
+                try {
+                    remoteHash = execSync('git rev-parse @{u}', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+                    behind = parseInt(execSync('git rev-list HEAD..@{u} --count', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim(), 10);
+                } catch (e2) {
+                    behind = 0;
+                }
+            }
+
             let commitLog = '';
             if (behind > 0) {
-                commitLog = execSync('git log HEAD..@{u} --oneline --no-decorate -n 10', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+                try {
+                    commitLog = execSync(`git log HEAD..${upstreamRef} --oneline --no-decorate -n 50`, { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+                } catch (e) {
+                    try {
+                        commitLog = execSync('git log HEAD..@{u} --oneline --no-decorate -n 50', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+                    } catch (e2) { commitLog = ''; }
+                }
             }
-            res.json({ updateAvailable: behind > 0, behind, localHash: localHash.slice(0, 7), remoteHash: remoteHash.slice(0, 7), commits: commitLog });
+
+            res.json({ enabled: true, updateAvailable: behind > 0, behind, localHash: localHash.slice(0, 7), remoteHash: remoteHash ? remoteHash.slice(0, 7) : null, commits: commitLog, remote, branch });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
 
-    app.post('/api/update/apply', (req, res) => {
+    app.post('/api/update/apply', async (req, res) => {
         try {
-            const pullOutput = execSync('git pull --ff-only', { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 30000 });
+            const updateCfg = getUpdateConfig();
+            if (updateCfg.enabled === false) return res.status(400).json({ success: false, error: 'Updates disabled in config' });
+
+            // Allow URL override via query param
+            const repoUrl = req.query.url || updateCfg.repoUrl || null;
+
+            // If a GitHub repo URL is provided, download latest release and deploy
+            if (repoUrl && repoUrl.includes('github.com')) {
+                const parsed = parseGithubOwnerRepo(repoUrl);
+                if (!parsed) return res.status(400).json({ success: false, error: 'Ungültige GitHub-URL' });
+
+                const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
+                const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
+                if (!r.ok) throw new Error(`GitHub API Fehler: ${r.status} ${r.statusText}`);
+                const json = await r.json();
+                const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
+                const tarball = assetUrl || json.tarball_url || json.zipball_url;
+                if (!tarball) throw new Error('Kein Release-Asset oder tarball verfügbar');
+
+                // Prepare temp dir
+                const tmpDir = path.join(os.tmpdir(), `ems_update_${Date.now()}`);
+                fs.mkdirSync(tmpDir, { recursive: true });
+
+                // Download and extract
+                const tmpArchive = path.join(tmpDir, 'release.tar.gz');
+                execSync(`curl -L -s -o "${tmpArchive}" "${tarball}"`, { timeout: 120000 });
+                const extractDir = path.join(tmpDir, 'extract');
+                fs.mkdirSync(extractDir);
+                execSync(`tar -xzf "${tmpArchive}" -C "${extractDir}"`, { timeout: 120000 });
+
+                // Find extracted dir
+                const extractedChildren = fs.readdirSync(extractDir);
+                if (extractedChildren.length === 0) throw new Error('Archiv leer');
+                const srcDirCandidate = path.join(extractDir, extractedChildren[0]);
+                const srcDir = fs.statSync(srcDirCandidate).isDirectory() ? srcDirCandidate : extractDir;
+
+                // Copy files into project (use tar stream to preserve modes). Exclude node_modules, data, logs, config/*.json
+                const excludeArgs = [
+                    "--exclude=./node_modules",
+                    "--exclude=./data",
+                    "--exclude=./logs",
+                    "--exclude=./config/*.json",
+                    "--exclude=./.git"
+                ].join(' ');
+                execSync(`tar -C "${srcDir}" -c ${excludeArgs} . | tar -C "${PROJECT_ROOT}" -xpf -`, { timeout: 120000 });
+
+                // Install deps
+                const npmArgs = updateCfg.npmInstallArgs || '--omit=dev';
+                execSync(`npm install ${npmArgs}`, { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 600000 });
+
+                // Cleanup temp
+                try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { }
+
+                // Restart via configured command if present
+                if (updateCfg.restartCommand && updateCfg.restartCommand.length > 0) {
+                    try {
+                        execSync(updateCfg.restartCommand, { cwd: PROJECT_ROOT, stdio: 'inherit' });
+                        return res.json({ success: true, message: 'Update applied and restart command executed.' });
+                    } catch (e) {
+                        console.error('[Update] restart command failed:', e.message);
+                    }
+                }
+
+                res.json({ success: true, message: 'Update erfolgreich. Server startet neu...' });
+                // Default: spawn a new node process and exit
+                setTimeout(() => {
+                    console.log('[Update] Starte Server neu...');
+                    const child = spawn(process.argv[0], process.argv.slice(1), {
+                        cwd: PROJECT_ROOT,
+                        detached: true,
+                        stdio: 'ignore',
+                        env: { ...process.env }
+                    });
+                    child.unref();
+                    process.exit(0);
+                }, 1000);
+                return;
+            }
+
+            // Legacy: git pull from remote
+            const env = buildGitEnv(updateCfg);
+            const remote = updateCfg.remote || 'origin';
+            let branch = updateCfg.branch;
+            if (!branch || branch.length === 0) {
+                branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
+            }
+
+            const pullCmd = (remote && branch) ? `git pull --ff-only ${remote} ${branch}` : 'git pull --ff-only';
+            const pullOutput = execSync(pullCmd, { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 30000, env });
             console.log('[Update] git pull:', pullOutput.trim());
-            const npmOutput = execSync('npm install --omit=dev', { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 60000 });
+
+            const npmArgs = updateCfg.npmInstallArgs || '--omit=dev';
+            execSync(`npm install ${npmArgs}`, { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 600000, env });
             console.log('[Update] npm install done');
+
+            // If a custom restart command is configured, run it instead of respawning Node
+            if (updateCfg.restartCommand && updateCfg.restartCommand.length > 0) {
+                try {
+                    console.log('[Update] running restart command');
+                    execSync(updateCfg.restartCommand, { cwd: PROJECT_ROOT, stdio: 'inherit', env });
+                    return res.json({ success: true, message: 'Update applied and restart command executed.' });
+                } catch (e) {
+                    console.error('[Update] restart command failed:', e.message);
+                    // fallthrough to default behavior
+                }
+            }
+
             res.json({ success: true, message: 'Update erfolgreich. Server startet neu...' });
-            // Neustart nach kurzer Verzögerung
+            // Default: spawn a new node process and exit
             setTimeout(() => {
                 console.log('[Update] Starte Server neu...');
                 const child = spawn(process.argv[0], process.argv.slice(1), {
                     cwd: PROJECT_ROOT,
                     detached: true,
                     stdio: 'ignore',
-                    env: { ...process.env }
+                    env: { ...env }
                 });
                 child.unref();
                 process.exit(0);

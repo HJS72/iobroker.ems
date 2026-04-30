@@ -135,30 +135,52 @@ class EnergyManager {
 
                 const extra = {};
                 if (pv.hasBattery) {
-                    const batteryDC = values[pv.datapoints.batteryPower]?.val || 0; // +Laden, -Entladen
-                    const batterySoc = values[pv.datapoints.batterySoc]?.val || 0;
-                    const dcPower = values[pv.datapoints.dcPower]?.val || 0;  // reiner PV-DC-Ertrag
+                    // Read raw datapoints but keep `null` when a datapoint is missing.
+                    const batteryDp = values[pv.datapoints.batteryPower];
+                    const socDp = values[pv.datapoints.batterySoc];
+                    const dcDp = values[pv.datapoints.dcPower];
+
+                    const batteryDCraw = batteryDp != null ? batteryDp.val : null; // +Laden, -Entladen
+                    const batterySocRaw = socDp != null ? socDp.val : null;
+                    const dcPowerRaw = dcDp != null ? dcDp.val : null; // reiner PV-DC-Ertrag
                     const acPower = power; // I_AC_Power (bereits vorzeichenbereinigt)
 
-                    // DC-Bus-Modell: dcNet = pvDC - batDC (Laden positiv → zieht von DC-Bus)
-                    const dcNet = dcPower - batteryDC;
+                    // Wenn keine Batterie-bezogenen DPs vorhanden sind, keine nulls in Zahlen verwandeln
+                    if (batteryDCraw == null && batterySocRaw == null && dcPowerRaw == null) {
+                        extra.batteryPower = null;
+                        extra.batterySoc = null;
+                        extra.dcPower = null;
+                        extra.pvAcPure = null;
+                        extra.batteryAcPower = null;
+                        extra.inverterEfficiency = null;
+                    } else {
+                        // Für Berechnungen fehlende Einzelfelder als 0 behandeln, aber im `extra` null belassen
+                        const batteryDC = batteryDCraw != null ? batteryDCraw : 0;
+                        const dcPower = dcPowerRaw != null ? dcPowerRaw : 0;
 
-                    // Wechselrichter-Wirkungsgrad berechnen
-                    let efficiency = 0.96; // Fallback
-                    if (dcNet > 50) {
-                        efficiency = Math.min(0.99, Math.max(0.85, acPower / dcNet));
+                        // DC-Bus-Modell: dcNet = pvDC - batDC (Laden positiv → zieht von DC-Bus)
+                        const dcNet = dcPower - batteryDC;
+
+                        // Wechselrichter-Wirkungsgrad berechnen
+                        let efficiency = 0.96; // Fallback
+                        if (dcNet > 50) {
+                            // Schutz vor Division durch 0
+                            if (dcNet !== 0) {
+                                efficiency = Math.min(0.99, Math.max(0.85, acPower / dcNet));
+                            }
+                        }
+
+                        // AC-Aufteilung
+                        const pvAcPure = dcPower * efficiency;      // Was PV alleine in AC liefert
+                        const batteryAcPower = -batteryDC * efficiency; // AC-Äquivalent Batterie (+ = speist ein, - = lädt)
+
+                        extra.batteryPower = batteryDCraw != null ? batteryDC : null;       // DC-Leistung (roh)
+                        extra.batterySoc = batterySocRaw != null ? batterySocRaw : null;
+                        extra.dcPower = dcPowerRaw != null ? dcPower : null;               // reiner PV-DC
+                        extra.pvAcPure = Math.round(pvAcPure); // PV-Anteil am AC (ohne Batterie)
+                        extra.batteryAcPower = Math.round(batteryAcPower); // Batterie AC-Äquivalent
+                        extra.inverterEfficiency = Math.round(efficiency * 1000) / 10; // % mit 1 Dezimale
                     }
-
-                    // AC-Aufteilung
-                    const pvAcPure = dcPower * efficiency;      // Was PV alleine in AC liefert
-                    const batteryAcPower = -batteryDC * efficiency; // AC-Äquivalent Batterie (+ = speist ein, - = lädt)
-
-                    extra.batteryPower = batteryDC;       // DC-Leistung (roh)
-                    extra.batterySoc = batterySoc;
-                    extra.dcPower = dcPower;               // reiner PV-DC
-                    extra.pvAcPure = Math.round(pvAcPure); // PV-Anteil am AC (ohne Batterie)
-                    extra.batteryAcPower = Math.round(batteryAcPower); // Batterie AC-Äquivalent
-                    extra.inverterEfficiency = Math.round(efficiency * 1000) / 10; // % mit 1 Dezimale
                 }
 
                 this.store.upsertCurrentValue(pv.id, power, dailyYield, extra);

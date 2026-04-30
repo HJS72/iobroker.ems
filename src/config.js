@@ -33,7 +33,7 @@ function getAllDatapointIds() {
     // PV systems
     for (const pv of cfg.pvSystems) {
         for (const dp of Object.values(pv.datapoints)) {
-            ids.push(dp);
+            if (dp) ids.push(dp);
         }
     }
     // Consumers

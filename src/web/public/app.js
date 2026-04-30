@@ -73,9 +73,9 @@ function updatePowerCards(data) {
                 <div class="pc-value">${formatPower(power)}</div>
                 <div class="pc-unit">${formatEnergy(sys?.energyTotal)} heute</div>
                 ${pv.hasBattery && sys?.extra ? `
-                    <div class="pc-unit">☀️ PV: ${formatPower(sys.extra.pvAcPure)} | 🔋 ${sys.extra.batterySoc?.toFixed(0)}%</div>
-                    <div class="pc-unit">${sys.extra.batteryAcPower > 0 ? '▶ Entladen' : '◀ Laden'} ${formatPower(Math.abs(sys.extra.batteryAcPower))} AC</div>
-                    <div class="pc-unit" style="font-size:0.6rem;opacity:0.5">η=${sys.extra.inverterEfficiency}%</div>
+                    <div class="pc-unit">☀️ PV: ${formatPower(sys.extra.pvAcPure)} | 🔋 ${sys.extra.batterySoc != null ? sys.extra.batterySoc.toFixed(0) + '%' : '–'}</div>
+                    <div class="pc-unit">${sys.extra.batteryAcPower != null ? (sys.extra.batteryAcPower > 0 ? '▶ Entladen' : '◀ Laden') + ' ' + formatPower(Math.abs(sys.extra.batteryAcPower)) + ' AC' : '–'}</div>
+                    <div class="pc-unit" style="font-size:0.6rem;opacity:0.5">η=${sys.extra.inverterEfficiency != null ? sys.extra.inverterEfficiency + '%' : '–'}</div>
                 ` : ''}
                 ${dpShort ? `<div class="pc-dp" title="${pv.datapoints.power}">${dpShort}</div>` : ''}
             </div>`;

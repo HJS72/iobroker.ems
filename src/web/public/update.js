@@ -36,6 +36,7 @@ async function loadPage() {
 function renderUpdateSettings(upd) {
     document.getElementById('cfg-update-enabled').value = (upd.enabled === false) ? 'false' : 'true';
     document.getElementById('cfg-update-remote').value = upd.remote || 'origin';
+    document.getElementById('cfg-update-repourl').value = upd.repoUrl || '';
     document.getElementById('cfg-update-branch').value = upd.branch || 'main';
     document.getElementById('cfg-update-sshkey').value = upd.sshKey || '';
     document.getElementById('cfg-update-sshcmd').value = upd.sshCommand || '';
@@ -47,6 +48,7 @@ function renderUpdateSettings(upd) {
 function collectUpdateSettings() {
     return {
         enabled: document.getElementById('cfg-update-enabled').value === 'true',
+        repoUrl: document.getElementById('cfg-update-repourl').value.trim(),
         remote: document.getElementById('cfg-update-remote').value.trim(),
         branch: document.getElementById('cfg-update-branch').value.trim(),
         sshKey: document.getElementById('cfg-update-sshkey').value.trim(),
@@ -96,7 +98,10 @@ async function checkUpdate() {
     document.getElementById('commit-log').innerHTML = '';
     document.getElementById('check-result').textContent = '';
     try {
-        const res = await fetch('/api/update/check');
+        // include repo URL if configured
+        const repoUrl = document.getElementById('cfg-update-repourl')?.value?.trim();
+        const query = repoUrl ? `?url=${encodeURIComponent(repoUrl)}` : '';
+        const res = await fetch('/api/update/check' + query);
         const data = await res.json();
         _updateInfo = data;
         if (!data || data.enabled === false) {
@@ -104,8 +109,14 @@ async function checkUpdate() {
             return;
         }
         if (data.updateAvailable) {
-            document.getElementById('check-result').textContent = `Update verfügbar: ${data.behind} Commit(s)`;
-            document.getElementById('commit-log').innerHTML = `<pre style="white-space:pre-wrap">${data.commits || ''}</pre>`;
+            if (data.remoteVersion && data.localVersion) {
+                document.getElementById('check-result').textContent = `Update verfügbar: ${data.remoteVersion} (aktuell ${data.localVersion})`;
+            } else if (data.behind != null) {
+                document.getElementById('check-result').textContent = `Update verfügbar: ${data.behind} Commit(s)`;
+            } else {
+                document.getElementById('check-result').textContent = 'Update verfügbar';
+            }
+            document.getElementById('commit-log').innerHTML = `<pre style="white-space:pre-wrap">${data.commits || ''}${data.releaseName ? '\n\nRelease: ' + data.releaseName : ''}</pre>`;
         } else {
             document.getElementById('check-result').textContent = 'Keine Updates verfügbar.';
         }
@@ -121,7 +132,9 @@ async function applyUpdate() {
     btn.disabled = true;
     btn.textContent = '⏳ Aktualisiere...';
     try {
-        const res = await fetch('/api/update/apply', { method: 'POST' });
+        const repoUrl = document.getElementById('cfg-update-repourl')?.value?.trim();
+        const query = repoUrl ? `?url=${encodeURIComponent(repoUrl)}` : '';
+        const res = await fetch('/api/update/apply' + query, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
             document.getElementById('check-result').innerHTML = '<span style="color:var(--green)">✅ Update gestartet. Server wird neu gestartet.</span>';

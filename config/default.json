@@ -153,4 +153,15 @@
   "web": {
     "port": 3000
   }
+  ,"update": {
+    "enabled": true,
+    "remote": "origin",
+    "repoUrl": "",
+    "branch": "main",
+    "sshKey": "",
+    "sshCommand": "",
+    "sshOptions": "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no",
+    "npmInstallArgs": "--omit=dev",
+    "restartCommand": ""
+  }
 }

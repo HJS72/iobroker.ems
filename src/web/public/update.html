@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMS – Update</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>🔁 EMS Update</h1>
+        <div id="update-status" class="status"></div>
+        <div class="header-actions">
+            <button id="btn-save-update" class="btn-primary">💾 Einstellungen speichern</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>Version & Prüfung</h2>
+            <div class="form-grid cols-2">
+                <div>
+                    <div>Aktuelle Build-Version</div>
+                    <div id="current-version" style="font-weight:700; margin-top:6px">–</div>
+                </div>
+                <div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <button id="btn-check" class="btn-secondary">🔎 Auf Updates prüfen</button>
+                        <button id="btn-apply" class="btn-primary">⬇ Update anwenden</button>
+                    </div>
+                    <div id="check-result" style="margin-top:8px;color:var(--text-dim)"></div>
+                </div>
+            </div>
+            <div style="margin-top:12px"><strong>Commit-Übersicht:</strong>
+                <div id="commit-log" style="margin-top:8px; max-height:220px; overflow:auto; background:var(--card); padding:8px; border-radius:6px; border:1px solid var(--border)"></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Update Einstellungen (für Privates GitHub Repo)</h2>
+            <div class="form-grid cols-2">
+                <label>Aktiviert
+                    <select id="cfg-update-enabled">
+                        <option value="true">Ja</option>
+                        <option value="false">Nein</option>
+                    </select>
+                </label>
+                <label>Remote
+                    <input type="text" id="cfg-update-remote" placeholder="origin">
+                </label>
+                <label>Branch
+                    <input type="text" id="cfg-update-branch" placeholder="main">
+                </label>
+                <label>SSH Key (Pfad auf Server)
+                    <input type="text" id="cfg-update-sshkey" placeholder="/home/stefan/.ssh/id_rsa">
+                </label>
+                <label>SSH Command (statt key)
+                    <input type="text" id="cfg-update-sshcmd" placeholder="ssh -o StrictHostKeyChecking=no -i /path/to/key">
+                </label>
+                <label>SSH Optionen
+                    <input type="text" id="cfg-update-sshopts" placeholder="-o IdentitiesOnly=yes -o StrictHostKeyChecking=no">
+                </label>
+                <label>NPM Install Args
+                    <input type="text" id="cfg-update-npmargs" placeholder="--omit=dev">
+                </label>
+                <label>Restart Command (optional)
+                    <input type="text" id="cfg-update-restart" placeholder="sudo systemctl restart iobroker-ems">
+                </label>
+            </div>
+            <p style="margin-top:8px;color:var(--text-dim)">Hinweis: SSH-Key/Command müssen auf dem Server gültig sein. Die Einstellungen werden in der Konfigurationsdatei gespeichert.</p>
+        </section>
+    </main>
+
+    <footer>
+        <span id="build-version">Version ...</span>
+        <span>Update-Vorgang kann die Anwendung kurz neustarten</span>
+    </footer>
+
+    <script src="nav.js"></script>
+    <script src="update.js"></script>
+</body>
+</html>

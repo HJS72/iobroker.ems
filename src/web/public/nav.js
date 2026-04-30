@@ -41,6 +41,9 @@ function renderNav() {
             <a href="/config.html" class="nav-link ${currentPage === 'config' ? 'active' : ''}">
                 <span class="nav-icon">⚙️</span> Konfiguration
             </a>
+            <a href="/update.html" class="nav-link ${currentPage === 'update' ? 'active' : ''}">
+                <span class="nav-icon">🔁</span> Update
+            </a>
             <div class="nav-divider"></div>
             <a href="#" class="nav-link" id="nav-update-link" style="display:none" onclick="showUpdateDialog();return false;">
                 <span class="nav-icon">🔄</span> <span id="nav-update-text">Update verfügbar</span>

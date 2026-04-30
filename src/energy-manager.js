@@ -158,25 +158,36 @@ class EnergyManager {
                         const batteryDC = batteryDCraw != null ? batteryDCraw : 0;
                         const dcPower = dcPowerRaw != null ? dcPowerRaw : 0;
 
-                        // DC-Bus-Modell: dcNet = pvDC - batDC (Laden positiv → zieht von DC-Bus)
-                        const dcNet = dcPower - batteryDC;
+                        // Korrekte PV-DC-Leistung berechnen
+                        // Wenn Batterie entlädt (batteryDC < 0), dann enthält dcPower auch PV-Leistung
+                        // pvDC = dcPower - batteryDC (wenn batteryDC negativ ist, wird PV-Leistung addiert)
+                        let pvDcPower;
+                        if (batteryDC < 0) {
+                            // Batterie entlädt sich: PV-DC = Gesamt-DC - (-Batterie-DC) = Gesamt-DC + Batterie-DC
+                            pvDcPower = dcPower + batteryDC; // batteryDC ist negativ
+                        } else {
+                            // Batterie lädt oder idle: PV-DC = Gesamt-DC - Batterie-DC
+                            pvDcPower = dcPower - batteryDC;
+                        }
+                        
+                        // Sicherstellen, dass PV-DC nicht negativ wird
+                        pvDcPower = Math.max(0, pvDcPower);
 
                         // Wechselrichter-Wirkungsgrad berechnen
                         let efficiency = 0.96; // Fallback
-                        if (dcNet > 50) {
+                        if (pvDcPower > 50) {
                             // Schutz vor Division durch 0
-                            if (dcNet !== 0) {
-                                efficiency = Math.min(0.99, Math.max(0.85, acPower / dcNet));
-                            }
+                            efficiency = Math.min(0.99, Math.max(0.85, acPower / pvDcPower));
                         }
 
                         // AC-Aufteilung
-                        const pvAcPure = dcPower * efficiency;      // Was PV alleine in AC liefert
+                        const pvAcPure = pvDcPower * efficiency;      // Was PV alleine in AC liefert
                         const batteryAcPower = -batteryDC * efficiency; // AC-Äquivalent Batterie (+ = speist ein, - = lädt)
 
                         extra.batteryPower = batteryDCraw != null ? batteryDC : null;       // DC-Leistung (roh)
                         extra.batterySoc = batterySocRaw != null ? batterySocRaw : null;
-                        extra.dcPower = dcPowerRaw != null ? dcPower : null;               // reiner PV-DC
+                        extra.dcPower = dcPowerRaw != null ? dcPower : null;               // Gesamt-DC (PV + Batterie)
+                        extra.pvDcPower = Math.round(pvDcPower);                           // Reine PV-DC-Leistung (ohne Batterie)
                         extra.pvAcPure = Math.round(pvAcPure); // PV-Anteil am AC (ohne Batterie)
                         extra.batteryAcPower = Math.round(batteryAcPower); // Batterie AC-Äquivalent
                         extra.inverterEfficiency = Math.round(efficiency * 1000) / 10; // % mit 1 Dezimale

@@ -76,9 +76,18 @@ class IoBrokerClient {
     async testConnection() {
         try {
             const url = `${this.baseUrl}/get/system.adapter.admin.0.alive`;
+            console.log(`[ioBroker] Testing connection to: ${url}`);
             const res = await fetch(url, { timeout: 5000 });
-            return res.ok;
-        } catch {
+            if (res.ok) {
+                const data = await res.json();
+                console.log(`[ioBroker] Connection successful, admin alive: ${data.val}`);
+                return true;
+            } else {
+                console.log(`[ioBroker] Connection failed: ${res.status} ${res.statusText}`);
+                return false;
+            }
+        } catch (error) {
+            console.log(`[ioBroker] Connection error: ${error.message}`);
             return false;
         }
     }

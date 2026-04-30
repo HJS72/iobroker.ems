@@ -4,7 +4,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
+// use curl for GitHub API calls if needed (avoids requiring node-fetch locally)
 
 function exec(cmd, opts = {}) {
     return execSync(cmd, { stdio: 'pipe', encoding: 'utf8', ...opts }).trim();
@@ -72,28 +72,14 @@ async function main() {
     const token = process.env.GITHUB_TOKEN;
     if (token) {
         const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases`;
-        const body = {
-            tag_name: tag,
-            name: tag,
-            body: `Release ${tag}`,
-            draft: false,
-            prerelease: false
-        };
+        const body = JSON.stringify({ tag_name: tag, name: tag, body: `Release ${tag}`, draft: false, prerelease: false });
         console.log('Creating GitHub release via API...');
-        const resp = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `token ${token}`,
-                'User-Agent': 'ems-release-script',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
-        });
-        if (!resp.ok) {
-            const txt = await resp.text();
-            console.error('GitHub release creation failed:', resp.status, txt);
-        } else {
-            console.log('GitHub release created.');
+        try {
+            const curlCmd = `curl -sS -X POST -H "Authorization: token ${token}" -H "User-Agent: ems-release-script" -H "Content-Type: application/json" -d '${body.replace(/'/g, "'\\''")} ' ${apiUrl}`;
+            const out = exec(curlCmd, { timeout: 30000 });
+            console.log('GitHub API response:', out.slice(0, 800));
+        } catch (e) {
+            console.error('GitHub release creation failed:', e.message);
         }
     } else {
         console.log('No GITHUB_TOKEN set — skipped creating GitHub Release object (tag pushed).');

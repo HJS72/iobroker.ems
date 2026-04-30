@@ -258,28 +258,75 @@ function createWebServer(energyManager, port) {
             const updateCfg = getUpdateConfig();
             if (updateCfg.enabled === false) return res.json({ enabled: false, updateAvailable: false });
 
-            // Allow overriding repository via query param `url`
             const repoUrl = req.query.url || updateCfg.repoUrl || null;
-            const localVersion = getLocalVersion();
+            const localVersionRaw = getLocalVersion();
+            const localVersion = normalizeVersion(localVersionRaw || '');
 
             if (repoUrl && repoUrl.includes('github.com')) {
-                // Check GitHub latest release
                 const parsed = parseGithubOwnerRepo(repoUrl);
                 if (!parsed) return res.status(400).json({ error: 'Ungültige GitHub-URL' });
-                const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
-                const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
-                if (!r.ok) throw new Error(`GitHub API Fehler: ${r.status} ${r.statusText}`);
-                const json = await r.json();
-                const remoteVersion = json.tag_name || json.name || null;
-                const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
-                const tarball = json.tarball_url || json.zipball_url || assetUrl;
-                const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
-                return res.json({ enabled: true, updateAvailable, localVersion, remoteVersion, downloadUrl: tarball, repo: `${parsed.owner}/${parsed.repo}`, releaseName: json.name || '' });
+
+                // 1) Try latest GitHub Release
+                try {
+                    const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
+                    const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
+                    if (r.ok) {
+                        const json = await r.json();
+                        const remoteVersionRaw = json.tag_name || json.name || null;
+                        const remoteVersion = normalizeVersion(remoteVersionRaw || '');
+                        const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
+                        const tarball = json.tarball_url || json.zipball_url || assetUrl || null;
+                        const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
+                        return res.json({ enabled: true, updateAvailable, localVersion: localVersionRaw, remoteVersion: remoteVersionRaw, downloadUrl: tarball, repo: `${parsed.owner}/${parsed.repo}`, releaseName: json.name || '' });
+                    }
+                } catch (e) { /* ignore and continue */ }
+
+                // 2) Try tags via GitHub API
+                try {
+                    const tagsUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/tags`;
+                    const rt = await fetch(tagsUrl, { headers: { 'User-Agent': 'ems-update' } });
+                    if (rt.ok) {
+                        const tags = await rt.json();
+                        if (Array.isArray(tags) && tags.length > 0) {
+                            const remoteVersionRaw = tags[0].name;
+                            const remoteVersion = normalizeVersion(remoteVersionRaw || '');
+                            const downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${encodeURIComponent(remoteVersionRaw)}.tar.gz`;
+                            const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
+                            return res.json({ enabled: true, updateAvailable, localVersion: localVersionRaw, remoteVersion: remoteVersionRaw, downloadUrl, repo: `${parsed.owner}/${parsed.repo}` });
+                        }
+                    }
+                } catch (e) { /* ignore and continue */ }
+
+                // 3) Fallback to git ls-remote to list tags and pick highest semver-like tag
+                try {
+                    const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8', timeout: 15000 });
+                    const tags = out.split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => {
+                        const parts = l.split('\t');
+                        return parts[1] ? parts[1].replace(/^refs\/tags\//, '') : null;
+                    }).filter(Boolean);
+                    if (tags.length > 0) {
+                        tags.sort((a, b) => {
+                            const aa = normalizeVersion(a).split('.').map(n => parseInt(n || '0', 10));
+                            const bb = normalizeVersion(b).split('.').map(n => parseInt(n || '0', 10));
+                            const len = Math.max(aa.length, bb.length);
+                            for (let i = 0; i < len; i++) {
+                                const av = aa[i] || 0;
+                                const bv = bb[i] || 0;
+                                if (av !== bv) return av - bv;
+                            }
+                            return 0;
+                        });
+                        const remoteVersionRaw = tags[tags.length - 1];
+                        const remoteVersion = normalizeVersion(remoteVersionRaw || '');
+                        const downloadUrl = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${encodeURIComponent(remoteVersionRaw)}.tar.gz`;
+                        const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
+                        return res.json({ enabled: true, updateAvailable, localVersion: localVersionRaw, remoteVersion: remoteVersionRaw, downloadUrl, repo: `${parsed.owner}/${parsed.repo}` });
+                    }
+                } catch (e) { /* ignore and continue */ }
             }
 
-            // Fallback: legacy git remote-based check
+            // Legacy: git remote check (branch-based)
             const env = buildGitEnv(updateCfg);
-
             execSync('git fetch', { cwd: PROJECT_ROOT, timeout: 15000, stdio: 'pipe', env });
             const localHash = execSync('git rev-parse HEAD', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
 
@@ -298,7 +345,6 @@ function createWebServer(energyManager, port) {
                 remoteHash = execSync(`git rev-parse ${upstreamRef}`, { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
                 behind = parseInt(execSync(`git rev-list HEAD..${upstreamRef} --count`, { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim(), 10);
             } catch (e) {
-                // fallback to @{u} if configured
                 try {
                     remoteHash = execSync('git rev-parse @{u}', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim();
                     behind = parseInt(execSync('git rev-list HEAD..@{u} --count', { cwd: PROJECT_ROOT, encoding: 'utf8', env }).trim(), 10);
@@ -337,13 +383,62 @@ function createWebServer(energyManager, port) {
                 const parsed = parseGithubOwnerRepo(repoUrl);
                 if (!parsed) return res.status(400).json({ success: false, error: 'Ungültige GitHub-URL' });
 
-                const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
-                const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
-                if (!r.ok) throw new Error(`GitHub API Fehler: ${r.status} ${r.statusText}`);
-                const json = await r.json();
-                const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
-                const tarball = assetUrl || json.tarball_url || json.zipball_url;
-                if (!tarball) throw new Error('Kein Release-Asset oder tarball verfügbar');
+                // Try releases/latest first, then fallback to tags archive
+                let tarball = null;
+                try {
+                    const apiUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/latest`;
+                    const r = await fetch(apiUrl, { headers: { 'User-Agent': 'ems-update' } });
+                    if (r.ok) {
+                        const json = await r.json();
+                        const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
+                        tarball = assetUrl || json.tarball_url || json.zipball_url || null;
+                    }
+                } catch (e) {
+                    // ignore and fallback
+                }
+
+                if (!tarball) {
+                    // fallback to latest tag via API
+                    try {
+                        const tagsUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/tags`;
+                        const rt = await fetch(tagsUrl, { headers: { 'User-Agent': 'ems-update' } });
+                        if (rt.ok) {
+                            const tags = await rt.json();
+                            if (Array.isArray(tags) && tags.length > 0) {
+                                const latestTag = tags[0].name;
+                                tarball = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${encodeURIComponent(latestTag)}.tar.gz`;
+                            }
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
+                if (!tarball) {
+                    // final fallback: use git ls-remote and pick highest semver-like tag
+                    try {
+                        const out = execSync(`git ls-remote --tags --refs ${repoUrl}`, { encoding: 'utf8', timeout: 15000 });
+                        const tags = out.split('\n').map(l => l.trim()).filter(l => l.length > 0).map(l => {
+                            const parts = l.split('\t');
+                            return parts[1] ? parts[1].replace(/^refs\/tags\//, '') : null;
+                        }).filter(Boolean);
+                        if (tags.length > 0) {
+                            tags.sort((a, b) => {
+                                const aa = normalizeVersion(a).split('.').map(n => parseInt(n || '0', 10));
+                                const bb = normalizeVersion(b).split('.').map(n => parseInt(n || '0', 10));
+                                const len = Math.max(aa.length, bb.length);
+                                for (let i = 0; i < len; i++) {
+                                    const av = aa[i] || 0;
+                                    const bv = bb[i] || 0;
+                                    if (av !== bv) return av - bv;
+                                }
+                                return 0;
+                            });
+                            const latestTag = tags[tags.length - 1];
+                            tarball = `https://github.com/${parsed.owner}/${parsed.repo}/archive/refs/tags/${encodeURIComponent(latestTag)}.tar.gz`;
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
+                if (!tarball) throw new Error('Kein Release-Asset, tarball oder Tag-Archiv verfügbar');
 
                 // Prepare temp dir
                 const tmpDir = path.join(os.tmpdir(), `ems_update_${Date.now()}`);

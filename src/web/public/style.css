@@ -118,7 +118,7 @@ main {
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 10px 8px;
+    padding: 8px 6px;
     text-align: center;
     position: relative;
 }
@@ -138,6 +138,11 @@ main {
 .power-card .pc-unit {
     font-size: 0.7rem;
     color: var(--text-dim);
+    padding: 0 4px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: break-word;
 }
 
 .power-card .pc-dp {

@@ -435,21 +435,10 @@ function updateEnergyFlow(data) {
     // Defs
     svg += `<defs>
         <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        <marker id="arrow-green" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#3dd68c"/></marker>
-        <marker id="arrow-red" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f74f4f"/></marker>
-        <marker id="arrow-yellow" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7c948"/></marker>
-        <marker id="arrow-orange" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#ff8c42"/></marker>
-        <marker id="arrow-bat" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#22c55e"/></marker>
-        <marker id="arrow-consumer" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7a94f"/></marker>
-        <marker id="arrow-teal" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
-        <marker id="arrow-car" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
     </defs>`;
 
     // ── Orthogonale Fluss-Linie ──
     // waypoints: Array von [x,y] Koordinaten
-    // Farbe → Arrow-Marker-ID Mapping
-    const arrowMarkers = { '#f7c948': 'arrow-yellow', '#ff8c42': 'arrow-orange', '#22c55e': 'arrow-bat', '#3dd68c': 'arrow-green', '#f74f4f': 'arrow-red', '#f7a94f': 'arrow-consumer', '#10b981': 'arrow-car' };
-
     function flowLine(waypoints, power, color, labelAtEnd) {
         if (power <= 0) return '';
         const thick = Math.max(1.5, Math.min(8, power / 600));
@@ -458,12 +447,11 @@ function updateEnergyFlow(data) {
         for (let i = 1; i < waypoints.length; i++) {
             d += ` L${waypoints[i][0]},${waypoints[i][1]}`;
         }
-        const markerId = arrowMarkers[color] || 'arrow-yellow';
         const dashLen = 8 + thick * 2;
         const gap = dashLen * 0.8;
         const speed = Math.max(0.4, 2 - power / 3000); // schneller bei mehr Leistung
         let s = `<path d="${d}" stroke="${color}" stroke-width="${thick}" fill="none" opacity="${op * 0.3}" stroke-linecap="round" stroke-linejoin="round"/>`;
-        s += `<path d="${d}" stroke="${color}" stroke-width="${thick}" fill="none" opacity="${op}" marker-end="url(#${markerId})" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${dashLen} ${gap}"><animate attributeName="stroke-dashoffset" from="${dashLen + gap}" to="0" dur="${speed}s" repeatCount="indefinite"/></path>`;
+        s += `<path d="${d}" stroke="${color}" stroke-width="${thick}" fill="none" opacity="${op}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${dashLen} ${gap}"><animate attributeName="stroke-dashoffset" from="${dashLen + gap}" to="0" dur="${speed}s" repeatCount="indefinite"/></path>`;
         // Label-Position: am letzten Segment (labelAtEnd) oder am Mittelsegment
         const li = labelAtEnd ? waypoints.length - 1 : Math.floor(waypoints.length / 2);
         const lx = (waypoints[li - 1][0] + waypoints[li][0]) / 2;

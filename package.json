@@ -1,13 +1,19 @@
 {
   "name": "iobroker-ems",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Energy Management System - ioBroker SimpleAPI Client mit PV-Prognose",
   "main": "src/main.js",
   "scripts": {
     "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 node src/main.js",
     "dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 node --watch src/main.js"
   },
-  "keywords": ["iobroker", "energy", "pv", "forecast", "ems"],
+  "keywords": [
+    "iobroker",
+    "energy",
+    "pv",
+    "forecast",
+    "ems"
+  ],
   "license": "MIT",
   "dependencies": {
     "express": "^4.21.0",

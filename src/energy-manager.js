@@ -158,31 +158,38 @@ class EnergyManager {
                         const batteryDC = batteryDCraw != null ? batteryDCraw : 0;
                         const dcPower = dcPowerRaw != null ? dcPowerRaw : 0;
 
-                        // Korrekte PV-DC-Leistung berechnen
-                        // Wenn Batterie entlädt (batteryDC < 0), dann enthält dcPower auch PV-Leistung
-                        // pvDC = dcPower - batteryDC (wenn batteryDC negativ ist, wird PV-Leistung addiert)
+                        // Korrekte Berechnung der PV-DC-Leistung je nach Batteriezustand:
                         let pvDcPower;
                         if (batteryDC < 0) {
-                            // Batterie entlädt sich: PV-DC = Gesamt-DC - (-Batterie-DC) = Gesamt-DC + Batterie-DC
-                            pvDcPower = dcPower + batteryDC; // batteryDC ist negativ
+                            // Batterie entlädt sich: dcPower enthält PV + Batterie-Entladung
+                            // pvDcPower = dcPower (ist bereits die Summe aus PV + Batterie)
+                            // Reine PV-Leistung kann nur aus dcPower - |batteryDC| berechnet werden
+                            pvDcPower = dcPower - batteryDC; // batteryDC ist negativ → wird addiert
+                        } else if (batteryDC > 0) {
+                            // Batterie lädt sich: dcPower enthält PV - Batterie-Ladung
+                            // pvDcPower = dcPower + batteryDC (wieder reine PV-Leistung)
+                            pvDcPower = dcPower + batteryDC;
                         } else {
-                            // Batterie lädt oder idle: PV-DC = Gesamt-DC - Batterie-DC
-                            pvDcPower = dcPower - batteryDC;
+                            // Batterie idle: dcPower = reine PV-Leistung
+                            pvDcPower = dcPower;
                         }
                         
                         // Sicherstellen, dass PV-DC nicht negativ wird
                         pvDcPower = Math.max(0, pvDcPower);
 
-                        // Wechselrichter-Wirkungsgrad berechnen
+                        // Wechselrichter-Wirkungsgrad basierend auf Gesamt-DC-Leistung
                         let efficiency = 0.96; // Fallback
-                        if (pvDcPower > 50) {
-                            // Schutz vor Division durch 0
-                            efficiency = Math.min(0.99, Math.max(0.85, acPower / pvDcPower));
+                        const totalDcPower = Math.max(0, dcPower);
+                        if (totalDcPower > 50) {
+                            efficiency = Math.min(0.99, Math.max(0.85, acPower / totalDcPower));
                         }
 
-                        // AC-Aufteilung
-                        const pvAcPure = pvDcPower * efficiency;      // Was PV alleine in AC liefert
-                        const batteryAcPower = -batteryDC * efficiency; // AC-Äquivalent Batterie (+ = speist ein, - = lädt)
+                        // AC-Aufteilung basierend auf DC-Beiträgen
+                        const pvAcPure = pvDcPower * efficiency;           // PV-Anteil am AC
+                        const batteryAcPower = -batteryDC * efficiency;    // Batterie-Anteil am AC
+                        
+                        // Wichtig: Die Gesamt-AC-Leistung muss Summe der Teile sein
+                        // acPower (vom Wechselrichter) = pvAcPure + batteryAcPower
 
                         extra.batteryPower = batteryDCraw != null ? batteryDC : null;       // DC-Leistung (roh)
                         extra.batterySoc = batterySocRaw != null ? batterySocRaw : null;
@@ -304,15 +311,24 @@ class EnergyManager {
                 this.store.upsertDailyStats(c.id, date, dailyEnergy, power);
             }
 
-            // Bilanz-Verbraucher (z.B. Hausverbrauch): P = Σ PV + Grid - Σ gemessene Verbraucher
+            // Bilanz-Verbraucher (z.B. Hausverbrauch): P = PV_rein + Grid - Σ gemessene Verbraucher
             if (balanceConsumers.length > 0) {
-                const totalPvPower = this.cfg.pvSystems.reduce((sum, pv) => {
+                // Reine PV-Leistung verwenden (ohne Batteriebeitrag)
+                let purePvPower = 0;
+                for (const pv of this.cfg.pvSystems) {
                     const cv = this.store.getCurrentValues();
                     const pvVal = cv.find(v => v.system_id === pv.id);
-                    return sum + (pvVal ? pvVal.power_w : 0);
-                }, 0);
+                    if (pvVal && pvVal.extra_json) {
+                        const extra = JSON.parse(pvVal.extra_json);
+                        // pvAcPure ist die reine PV-AC-Leistung ohne Batterie
+                        purePvPower += extra.pvAcPure || 0;
+                    } else if (pvVal) {
+                        // Fallback wenn keine pvAcPure verfügbar
+                        purePvPower += pvVal.power_w || 0;
+                    }
+                }
 
-                const balancePower = Math.max(0, totalPvPower + gridPower - measuredConsumerPower);
+                const balancePower = Math.max(0, purePvPower + gridPower - measuredConsumerPower);
 
                 for (const c of balanceConsumers) {
                     const dailyEnergy = this._calcDailyEnergy(

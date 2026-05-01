@@ -204,9 +204,15 @@ function updatePvChart(data) {
     const combinedActual = data.combinedActual || {};
     const actualValues = new Array(24).fill(null);
     let hasActual = false;
+    const currentHour = new Date().getHours();
+    
     for (const [hour, watts] of Object.entries(combinedActual)) {
-        actualValues[parseInt(hour)] = watts;
-        hasActual = true;
+        const hourInt = parseInt(hour);
+        // Nur Ist-Werte bis zur aktuellen Stunde anzeigen
+        if (hourInt <= currentHour) {
+            actualValues[hourInt] = watts;
+            hasActual = true;
+        }
     }
     if (hasActual) {
         datasets.push({
@@ -394,8 +400,8 @@ function updateEnergyFlow(data) {
     const wbIdx = houseConsumers.findIndex(c => c.id === 'wallbox');
     if (wbIdx >= 0) houseConsumers.push(houseConsumers.splice(wbIdx, 1)[0]);
 
-    const batteryCharging = batteryPower < 0;
-    const batteryDischarging = batteryPower > 0;
+    const batteryCharging = batteryPower < 0;    // batteryAcPower < 0 = Laden
+    const batteryDischarging = batteryPower > 0; // batteryAcPower > 0 = Entladen
     const batteryAbsPower = Math.abs(batteryPower);
 
     // ── Layout (orthogonal) ──
@@ -468,13 +474,19 @@ function updateEnergyFlow(data) {
     // PV1 → Haus (Solaredge links, runter zum Bus, rüber zu Haus)
     const pv1Power = pvSystems[0]?.power || 0;
     if (pv1Power > 0) {
-        svg += flowLine([[pv1.x, pv1.y + 26], [pv1.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv1Power, '#f7c948');
+        svg += flowLine([[pv1.x, pv1.y + 26], [pv1.x, pvBusY], [busX, pvBusY]], pv1Power, '#f7c948');
     }
 
     // PV2 → Haus (Hoymiles mitte, direkt runter)
     const pv2Power = pvSystems[1]?.power || 0;
     if (pv2Power > 0) {
-        svg += flowLine([[pv2.x, pv2.y + 26], [pv2.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv2Power, '#ff8c42');
+        svg += flowLine([[pv2.x, pv2.y + 26], [pv2.x, pvBusY], [busX, pvBusY]], pv2Power, '#f7c948');
+    }
+
+    // PV-Gesamt vom Bus zum Haus (nur wenn Gesamt-PV > 0)
+    const totalPvPower = pv1Power + pv2Power;
+    if (totalPvPower > 0) {
+        svg += flowLine([[busX, pvBusY], [busX, houseXY.y - houseR]], totalPvPower, '#f7c948');
     }
 
     // Batterie ← PV (laden): von PV1 runter zur Batterie
@@ -496,13 +508,55 @@ function updateEnergyFlow(data) {
         svg += flowLine([[gridXY.x, gridXY.y - 26], [gridXY.x, 340], [houseXY.x, 340], [houseXY.x, houseXY.y + houseR]], purchase, '#f74f4f');
     }
 
-    // Haus → Verbraucher (orthogonal rechts)
+    // Haus → Verbraucher mit spezifischen Andockpunkten
     const cBusX = 560;
+    
+    // 8 Andockpunkte am Haus (im Uhrzeigersinn: 12, 1:30, 3, 4:30, 6, 7:30, 9, 10:30)
+    const getConnectionPoint = (pointNumber) => {
+        const angles = [0, 45, 90, 135, 180, 225, 270, 315]; // Grad
+        // 90° im Uhrzeigersinn drehen (von SVG-Mathematik zu visueller Uhrzeit)
+        const adjustedAngles = angles.map(a => (a - 90 + 360) % 360);
+        const angleRad = (adjustedAngles[pointNumber - 1] * Math.PI) / 180; // pointNumber: 1-8
+        const pointX = houseXY.x + houseR * Math.cos(angleRad);
+        const pointY = houseXY.y + houseR * Math.sin(angleRad);
+        return { x: pointX, y: pointY };
+    };
+    
     houseConsumers.forEach((c, i) => {
         if (c.power > 0) {
             const cy = cStartY + i * cSpacing;
             const lineColor = c.id === 'wallbox' ? '#10b981' : '#f7a94f';
-            svg += flowLine([[houseXY.x + houseR, houseXY.y], [cBusX, houseXY.y], [cBusX, cy], [cX - 24, cy]], c.power, lineColor, true);
+            
+            // Spezifische Andockpunkte zuweisen:
+            let connectionPoint;
+            if (c.id === 'house' || c.id === 'wm1' || c.id === 'tr1') {
+                // Hausverbrauch, Waschmaschine, Trockner → Ausgang Nr.2 (1:30 Uhr)
+                connectionPoint = getConnectionPoint(2);
+            } else if (c.id === 'bwwp' || c.id === 'klima') {
+                // Ochsner, Klimaanlage → Ausgang Nr.3 (3:00 Uhr)
+                connectionPoint = getConnectionPoint(3);
+            } else if (c.id === 'wallbox') {
+                // Zappi → Ausgang Nr.4 (4:30 Uhr)
+                connectionPoint = getConnectionPoint(4);
+            } else {
+                // Andere Verbraucher → Ausgang Nr.1 (12:00 Uhr)
+                connectionPoint = getConnectionPoint(1);
+            }
+            
+            // Flusslinie vom Andockpunkt zum Verbraucher (vertikal/horizontal)
+            if (connectionPoint.x > houseXY.x) {
+                // Rechte Seite: horizontal nach rechts, dann vertikal zum Verbraucher
+                svg += flowLine([[connectionPoint.x, connectionPoint.y], [cX - 24, connectionPoint.y], [cX - 24, cy]], c.power, lineColor, true);
+            } else if (connectionPoint.x < houseXY.x) {
+                // Linke Seite: horizontal nach links, dann vertikal zum Verbraucher
+                svg += flowLine([[connectionPoint.x, connectionPoint.y], [cX - 24, connectionPoint.y], [cX - 24, cy]], c.power, lineColor, true);
+            } else if (connectionPoint.y < houseXY.y) {
+                // Oben: vertikal nach oben, dann horizontal zum Verbraucher
+                svg += flowLine([[connectionPoint.x, connectionPoint.y], [connectionPoint.x, cy - 30], [cX - 24, cy - 30], [cX - 24, cy]], c.power, lineColor, true);
+            } else {
+                // Unten: vertikal nach unten, dann horizontal zum Verbraucher
+                svg += flowLine([[connectionPoint.x, connectionPoint.y], [connectionPoint.x, cy + 30], [cX - 24, cy + 30], [cX - 24, cy]], c.power, lineColor, true);
+            }
         }
     });
 
@@ -537,7 +591,7 @@ function updateEnergyFlow(data) {
 
     // PV1 & PV2 – Fluss geht nach unten → Label oben
     svg += drawNode(pv1.x, pv1.y, 26, 'sun', pvSystems[0]?.name || 'PV1', pv1Power, '#f7c948', pv1Power > 0, 20, 'top');
-    svg += drawNode(pv2.x, pv2.y, 26, 'sun', pvSystems[1]?.name || 'PV2', pv2Power, '#ff8c42', pv2Power > 0, 20, 'top');
+    svg += drawNode(pv2.x, pv2.y, 26, 'sun', pvSystems[1]?.name || 'PV2', pv2Power, '#f7c948', pv2Power > 0, 20, 'top');
 
     // Batterie – Fluss geht nach rechts/oben → Label links
     if (hasBattery) {

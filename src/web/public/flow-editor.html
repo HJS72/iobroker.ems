@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energiefluss Editor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            background: #1a1a1a;
+            color: #e4e6eb;
+            overflow: hidden;
+        }
+        
+        .editor-container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 280px;
+            background: #2d2d2d;
+            padding: 20px;
+            border-right: 1px solid #444;
+            overflow-y: auto;
+        }
+        
+        .canvas-area {
+            flex: 1;
+            position: relative;
+            background: #1a1a1a;
+            overflow: hidden;
+        }
+        
+        #flow-canvas {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        
+        #flow-canvas.dragging {
+            cursor: grabbing;
+        }
+        
+        .node {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: move;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+            z-index: 10;
+        }
+        
+        .node:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+        
+        .node.selected {
+            box-shadow: 0 0 25px rgba(100, 200, 255, 0.8);
+            transform: scale(1.1);
+        }
+        
+        .node.pv {
+            background: linear-gradient(135deg, #f7c948, #f39c12);
+            border: 2px solid #f7c948;
+        }
+        
+        .node.battery {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            border: 2px solid #22c55e;
+        }
+        
+        .node.house {
+            background: linear-gradient(135deg, #4fc3f7, #2196f3);
+            border: 2px solid #4fc3f7;
+            width: 80px;
+            height: 80px;
+        }
+        
+        .node.grid {
+            background: linear-gradient(135deg, #f74f4f, #dc2626);
+            border: 2px solid #f74f4f;
+        }
+        
+        .node.consumer {
+            background: linear-gradient(135deg, #f7a94f, #f59e0b);
+            border: 2px solid #f7a94f;
+        }
+        
+        .node.wallbox {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border: 2px solid #10b981;
+        }
+        
+        .connection-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #666;
+            cursor: crosshair;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 15;
+        }
+        
+        .node:hover .connection-point {
+            opacity: 1;
+        }
+        
+        .connection-point:hover {
+            transform: scale(1.5);
+            background: #4fc3f7;
+        }
+        
+        .connection-point.input {
+            background: #22c55e;
+        }
+        
+        .connection-point.output {
+            background: #f74f4f;
+        }
+        
+        .junction-node {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #666;
+            cursor: pointer;
+            z-index: 5;
+            opacity: 0.8;
+        }
+        
+        .junction-node:hover {
+            transform: scale(1.3);
+            background: #4fc3f7;
+        }
+        
+        .flow-line {
+            stroke: #4fc3f7;
+            stroke-width: 3;
+            fill: none;
+            opacity: 0.8;
+            pointer-events: stroke;
+        }
+        
+        .flow-line.active {
+            stroke: #22c55e;
+            stroke-width: 4;
+            opacity: 1;
+            filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.6));
+        }
+        
+        .temp-line {
+            stroke: #fff;
+            stroke-width: 2;
+            stroke-dasharray: 5, 5;
+            fill: none;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .connection-handle {
+            fill: #ffffff;
+            stroke: #22c55e;
+            stroke-width: 3;
+            cursor: pointer;
+            pointer-events: all;
+        }
+        }
+        
+        .controls {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #999;
+        }
+        
+        .btn {
+            background: #4fc3f7;
+            color: #1a1a1a;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #29b6f6;
+        }
+        
+        .btn.danger {
+            background: #f74f4f;
+            color: #fff;
+        }
+        
+        .btn.danger:hover {
+            background: #dc2626;
+        }
+        
+        .node-list {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .draggable-node {
+            background: #3d3d3d;
+            border: 1px solid #555;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            cursor: grab;
+            text-align: center;
+            transition: background 0.2s;
+        }
+        
+        .draggable-node:hover {
+            background: #4d4d4d;
+        }
+        
+        .draggable-node.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+        
+        .info-panel {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+        
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #4fc3f7;
+        }
+        
+        .coordinates {
+            font-family: monospace;
+            color: #999;
+        }
+        
+        .help-text {
+            font-size: 11px;
+            color: #999;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <div class="sidebar">
+            <div class="controls">
+                <div class="control-group">
+                    <label>Editor Steuerung</label>
+                    <button class="btn" onclick="saveConfiguration()">Speichern</button>
+                    <button class="btn" onclick="resetCanvas()">Zurücksetzen</button>
+                    <button class="btn danger" onclick="clearAll()">Alles löschen</button>
+                </div>
+                
+                <div class="control-group">
+                    <label>Ansicht</label>
+                    <button class="btn" onclick="toggleGrid()">Raster ein/aus</button>
+                    <button class="btn" onclick="toggleSnap()">Magnet ein/aus</button>
+                </div>
+            </div>
+            
+            <div class="node-list">
+                <div class="control-group">
+                    <label>Knoten zum Hinzufügen</label>
+                    <div class="draggable-node" draggable="true" data-node-type="pv">
+                        ☀️ PV-Anlage
+                    </div>
+                    <div class="draggable-node" draggable="true" data-node-type="battery">
+                        🔋 Batterie
+                    </div>
+                    <div class="draggable-node" draggable="true" data-node-type="house">
+                        🏠 Haus
+                    </div>
+                    <div class="draggable-node" draggable="true" data-node-type="grid">
+                        ⚡ Netz
+                    </div>
+                    <div class="draggable-node" draggable="true" data-node-type="consumer">
+                        📺 Verbraucher
+                    </div>
+                    <div class="draggable-node" draggable="true" data-node-type="wallbox">
+                        🚗 Wallbox
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>Editor Info</h3>
+                <div class="coordinates">
+                    <div>Maus: <span id="mouse-coords">0, 0</span></div>
+                    <div>Auswahl: <span id="selected-info">Keine</span></div>
+                </div>
+                <div class="help-text">
+                    <strong>Bedienung:</strong><br>
+                    • Knoten ziehen zum Verschieben<br>
+                    • Verbindungspunkte klicken zum Verbinden<br>
+                    • Rechtsklick zum Löschen<br>
+                    • Shift+Klick für Mehrfachauswahl<br>
+                    • Leertaste zum Drehen
+                </div>
+                <div id="assignment-panel" style="margin-top:12px;">
+                    <label style="display:block;margin-bottom:6px;color:#999;font-size:12px;text-transform:uppercase">Gerät zuordnen</label>
+                    <select id="device-select" style="width:100%;padding:6px;border-radius:4px;background:#3d3d3d;border:1px solid #555;color:#e4e6eb"></select>
+                    <div style="margin-top:8px"><button class="btn" onclick="assignSelectedNodeToDevice()">Zuordnen</button></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="canvas-area">
+            <svg id="flow-canvas">
+                <defs>
+                    <filter id="glow">
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+                <g id="flow-lines"></g>
+                <g id="connection-handles"></g>
+                <g id="junction-nodes"></g>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        class FlowEditor {
+            constructor() {
+                this.canvas = document.getElementById('flow-canvas');
+                this.flowLinesGroup = document.getElementById('flow-lines');
+                this.connectionHandlesGroup = document.getElementById('connection-handles');
+                this.junctionNodesGroup = document.getElementById('junction-nodes');
+                this.nodes = new Map();
+                this.connections = [];
+                this.junctionNodes = new Map();
+                this.selectedNode = null;
+                this.selectedConnection = null;
+                this.selectedConnectionPoint = null;
+                this.tempLine = null;
+                this.isDragging = false;
+                this.isConnecting = false;
+                this.isReconnecting = false;
+                this.reconnectingConnection = null;
+                this.reconnectingHandle = null;
+                this.originalConnectionEndpoint = null;
+                this.gridEnabled = true;
+                this.snapEnabled = true;
+                this.nodeIdCounter = 0;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupEventListeners();
+                this.setupDragAndDrop();
+                this.updateCanvasSize();
+                this.renderGrid();
+            }
+            
+            setupEventListeners() {
+                // Canvas events
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                // Also listen on document so dragging still works when pointer is over nodes/html
+                document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+                this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                
+                // Keyboard events
+                document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+                
+                // Window resize
+                window.addEventListener('resize', () => this.updateCanvasSize());
+            }
+            
+            setupDragAndDrop() {
+                const draggables = document.querySelectorAll('.draggable-node');
+                draggables.forEach(node => {
+                    node.addEventListener('dragstart', (e) => {
+                        // Provide multiple dataTransfer types for cross-browser compatibility
+                        try {
+                            e.dataTransfer.setData('text/nodeType', node.dataset.nodeType);
+                        } catch (err) {}
+                        try {
+                            e.dataTransfer.setData('text/plain', node.dataset.nodeType);
+                        } catch (err) {}
+                        try {
+                            e.dataTransfer.setData('nodeType', node.dataset.nodeType);
+                        } catch (err) {}
+                        e.dataTransfer.effectAllowed = 'copy';
+                        node.classList.add('dragging');
+                    });
+                    
+                    node.addEventListener('dragend', () => {
+                        node.classList.remove('dragging');
+                    });
+                });
+                
+                this.canvas.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                });
+                
+                this.canvas.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const nodeType = e.dataTransfer.getData('text/nodeType') || e.dataTransfer.getData('nodeType') || e.dataTransfer.getData('text/plain');
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    this.addNode(nodeType, x, y);
+                });
+            }
+            
+            addNode(type, x, y, givenId = null, assignedDevice = null) {
+                // Allow restoring saved id/device
+                let nodeId;
+                if (givenId) {
+                    nodeId = givenId;
+                    // ensure counter stays ahead
+                    const parts = String(givenId).split('-');
+                    const num = parseInt(parts[1]);
+                    if (!isNaN(num) && num >= this.nodeIdCounter) this.nodeIdCounter = num + 1;
+                } else {
+                    nodeId = `node-${this.nodeIdCounter++}`;
+                }
+                const node = document.createElement('div');
+                node.className = `node ${type}`;
+                node.id = nodeId;
+                node.style.left = `${x - 30}px`;
+                node.style.top = `${y - 30}px`;
+                
+                // Add icon based on type
+                const icons = {
+                    pv: '☀️',
+                    battery: '🔋',
+                    house: '🏠',
+                    grid: '⚡',
+                    consumer: '📺',
+                    wallbox: '🚗'
+                };
+                node.textContent = icons[type] || '📦';
+                
+                // Add connection points (8 points around the node)
+                this.addConnectionPoints(node);
+                
+                // Add event listeners
+                node.addEventListener('mousedown', (e) => this.handleNodeMouseDown(e, nodeId));
+                node.addEventListener('contextmenu', (e) => this.handleNodeRightClick(e, nodeId));
+                
+                this.canvas.parentElement.appendChild(node);
+                this.nodes.set(nodeId, {
+                    element: node,
+                    type: type,
+                    x: x,
+                    y: y,
+                    connections: [],
+                    deviceId: assignedDevice || null
+                });
+                
+                this.selectNode(nodeId);
+            }
+            
+            addConnectionPoints(node) {
+                const points = [
+                    { x: 30, y: 0, angle: 0, type: 'output' },     // Top
+                    { x: 42, y: 18, angle: 45, type: 'output' },   // Top-right
+                    { x: 60, y: 30, angle: 90, type: 'output' },  // Right
+                    { x: 42, y: 42, angle: 135, type: 'output' },  // Bottom-right
+                    { x: 30, y: 60, angle: 180, type: 'input' },  // Bottom
+                    { x: 18, y: 42, angle: 225, type: 'input' },   // Bottom-left
+                    { x: 0, y: 30, angle: 270, type: 'input' },    // Left
+                    { x: 18, y: 18, angle: 315, type: 'input' }     // Top-left
+                ];
+                
+                points.forEach((point, index) => {
+                    const connectionPoint = document.createElement('div');
+                    connectionPoint.className = `connection-point ${point.type}`;
+                    connectionPoint.style.left = `${point.x - 4}px`;
+                    connectionPoint.style.top = `${point.y - 4}px`;
+                    connectionPoint.dataset.angle = point.angle;
+                    connectionPoint.dataset.type = point.type;
+                    connectionPoint.dataset.index = index;
+                    
+                    connectionPoint.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        this.handleConnectionPointMouseDown(e, node.id, point);
+                    });
+                    
+                    node.appendChild(connectionPoint);
+                });
+            }
+            
+            handleNodeMouseDown(e, nodeId) {
+                if (e.button === 0) { // Left click
+                    this.selectNode(nodeId);
+                    this.startDragging(nodeId, e.clientX, e.clientY);
+                }
+            }
+            
+            handleConnectionPointMouseDown(e, nodeId, point) {
+                this.isConnecting = true;
+                this.selectedConnectionPoint = { nodeId, point };
+                // Start temp line exactly at the connection point position
+                const node = this.nodes.get(nodeId);
+                if (node) {
+                    const cpPos = this.getConnectionPointPosition(node, { angle: point.angle });
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.startTempLine(rect.left + cpPos.x, rect.top + cpPos.y);
+                } else {
+                    this.startTempLine(e.clientX, e.clientY);
+                }
+            }
+            
+            startDragging(nodeId, startX, startY) {
+                this.isDragging = true;
+                this.dragNode = nodeId;
+                const rect = this.canvas.getBoundingClientRect();
+                const relX = startX - rect.left;
+                const relY = startY - rect.top;
+                const node = this.nodes.get(nodeId);
+                this.dragOffsetX = relX - (node?.x || 0);
+                this.dragOffsetY = relY - (node?.y || 0);
+                this.originalNodePos = { x: node?.x || 0, y: node?.y || 0 };
+
+                this.canvas.classList.add('dragging');
+            }
+            
+            startTempLine(startX, startY) {
+                const rect = this.canvas.getBoundingClientRect();
+                this.tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                this.tempLine.classList.add('temp-line');
+                this.tempLine.setAttribute('x1', startX - rect.left);
+                this.tempLine.setAttribute('y1', startY - rect.top);
+                this.tempLine.setAttribute('x2', startX - rect.left);
+                this.tempLine.setAttribute('y2', startY - rect.top);
+                this.flowLinesGroup.appendChild(this.tempLine);
+            }
+            
+            handleMouseMove(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Update coordinates display
+                document.getElementById('mouse-coords').textContent = `${Math.round(x)}, ${Math.round(y)}`;
+                
+                if (this.isDragging && this.dragNode) {
+                    this.moveNode(this.dragNode, x, y);
+                } else if ((this.isConnecting || this.isReconnecting) && this.tempLine) {
+                    this.updateTempLine(x, y);
+                }
+            }
+            
+            handleMouseUp(e) {
+                if (this.isReconnecting) {
+                    this.finishReconnection(e);
+                } else if (this.isConnecting) {
+                    this.finishConnection(e);
+                }
+                
+                this.isDragging = false;
+                this.isConnecting = false;
+                this.isReconnecting = false;
+                this.dragNode = null;
+                this.reconnectingConnection = null;
+                this.reconnectingHandle = null;
+                this.originalConnectionEndpoint = null;
+                this.canvas.classList.remove('dragging');
+                
+                if (this.tempLine) {
+                    this.tempLine.remove();
+                    this.tempLine = null;
+                }
+            }
+            
+            moveNode(nodeId, x, y) {
+                const node = this.nodes.get(nodeId);
+                if (!node) return;
+
+                // Compute new position based on initial drag offset
+                let newX = x - (this.dragOffsetX || 0);
+                let newY = y - (this.dragOffsetY || 0);
+
+                // Apply grid snapping if enabled
+                if (this.snapEnabled && this.gridEnabled) {
+                    newX = Math.round(newX / 20) * 20;
+                    newY = Math.round(newY / 20) * 20;
+                }
+
+                // Update node position
+                node.x = newX;
+                node.y = newY;
+                node.element.style.left = `${newX - 30}px`;
+                node.element.style.top = `${newY - 30}px`;
+
+                // Update connections
+                this.updateNodeConnections(nodeId);
+            }
+            
+            updateTempLine(x, y) {
+                if (this.tempLine) {
+                    this.tempLine.setAttribute('x2', x);
+                    this.tempLine.setAttribute('y2', y);
+                }
+            }
+            
+            finishConnection(e) {
+                // Find connection point under mouse
+                const targetPoint = this.findConnectionPointUnderMouse(e.clientX, e.clientY);
+                
+                if (targetPoint && this.canConnect(this.selectedConnectionPoint, targetPoint)) {
+                    this.createConnection(this.selectedConnectionPoint, targetPoint);
+                }
+                
+                this.selectedConnectionPoint = null;
+            }
+            
+            findConnectionPointUnderMouse(x, y) {
+                const points = document.elementsFromPoint(x, y);
+                for (const point of points) {
+                    if (point.classList.contains('connection-point')) {
+                        const nodeElement = point.closest('.node');
+                        return {
+                            nodeId: nodeElement.id,
+                            point: {
+                                angle: point.dataset.angle,
+                                type: point.dataset.type,
+                                index: point.dataset.index
+                            }
+                        };
+                    }
+                }
+                return null;
+            }
+            
+            canConnect(from, to) {
+                // Can't connect to same node
+                if (from.nodeId === to.nodeId) return false;
+                
+                // Output should connect to input
+                if (from.point.type === to.point.type) return false;
+                
+                // Check if connection already exists
+                const exists = this.connections.some(conn => 
+                    (conn.from.nodeId === from.nodeId && conn.to.nodeId === to.nodeId) ||
+                    (conn.from.nodeId === to.nodeId && conn.to.nodeId === from.nodeId)
+                );
+                
+                return !exists;
+            }
+            
+            createConnection(from, to) {
+                const connection = {
+                    id: `conn-${Date.now()}`,
+                    from: from,
+                    to: to,
+                    path: null
+                };
+                
+                this.connections.push(connection);
+                this.renderConnection(connection);
+            }
+
+            startReconnecting(connection, handle, startX, startY) {
+                this.isReconnecting = true;
+                this.reconnectingConnection = connection;
+                this.reconnectingHandle = handle;
+                this.selectedConnection = connection.id;
+                this.selectedConnectionPoint = null;
+                this.originalConnectionEndpoint = { ...connection[handle] };
+                this.renderConnectionHandles(connection);
+                const fromNode = this.nodes.get(connection.from.nodeId);
+                const toNode = this.nodes.get(connection.to.nodeId);
+                const point = handle === 'from' ? this.getConnectionPointPosition(fromNode, connection.from.point) : this.getConnectionPointPosition(toNode, connection.to.point);
+                const rect = this.canvas.getBoundingClientRect();
+                this.startTempLine(rect.left + point.x, rect.top + point.y);
+            }
+
+            finishReconnection(e) {
+                if (!this.reconnectingConnection || !this.reconnectingHandle) return;
+                const targetPoint = this.findConnectionPointUnderMouse(e.clientX, e.clientY);
+                const oppositeHandle = this.reconnectingHandle === 'from' ? 'to' : 'from';
+                const existingOther = this.reconnectingConnection[oppositeHandle];
+                if (targetPoint && this.canConnect(targetPoint, existingOther)) {
+                    this.reconnectingConnection[this.reconnectingHandle] = targetPoint;
+                    this.updateConnectionPath(this.reconnectingConnection);
+                } else {
+                    // restore original endpoint if reconnect failed
+                    this.reconnectingConnection[this.reconnectingHandle] = this.originalConnectionEndpoint;
+                }
+                this.selectConnection(this.reconnectingConnection.id);
+            }
+
+            updateConnectionPath(connection) {
+                if (!connection.path) return;
+                const fromNode = this.nodes.get(connection.from.nodeId);
+                const toNode = this.nodes.get(connection.to.nodeId);
+                if (!fromNode || !toNode) return;
+                connection.path.setAttribute('d', this.calculateOrthogonalPath(fromNode, toNode, connection));
+            }
+            
+            renderConnection(connection) {
+                const fromNode = this.nodes.get(connection.from.nodeId);
+                const toNode = this.nodes.get(connection.to.nodeId);
+                
+                if (!fromNode || !toNode) return;
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.classList.add('flow-line');
+                path.id = connection.id;
+                
+                // Calculate path using orthogonal routing
+                const pathData = this.calculateOrthogonalPath(fromNode, toNode, connection);
+                path.setAttribute('d', pathData);
+                
+                path.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.selectConnection(connection.id);
+                });
+                path.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    this.deleteConnection(connection.id);
+                });
+                
+                this.flowLinesGroup.appendChild(path);
+                connection.path = path;
+            }
+            
+            calculateOrthogonalPath(fromNode, toNode, connection) {
+                const fromPoint = this.getConnectionPointPosition(fromNode, connection.from.point);
+                const toPoint = this.getConnectionPointPosition(toNode, connection.to.point);
+                
+                // Simple orthogonal routing
+                const midX = (fromPoint.x + toPoint.x) / 2;
+                const midY = (fromPoint.y + toPoint.y) / 2;
+                
+                // Choose routing based on relative positions
+                if (Math.abs(fromPoint.x - toPoint.x) > Math.abs(fromPoint.y - toPoint.y)) {
+                    // Horizontal first
+                    return `M ${fromPoint.x} ${fromPoint.y} L ${midX} ${fromPoint.y} L ${midX} ${toPoint.y} L ${toPoint.x} ${toPoint.y}`;
+                } else {
+                    // Vertical first
+                    return `M ${fromPoint.x} ${fromPoint.y} L ${fromPoint.x} ${midY} L ${toPoint.x} ${midY} L ${toPoint.x} ${toPoint.y}`;
+                }
+            }
+            
+            getConnectionPointPosition(node, pointInfo) {
+                const angle = parseInt(pointInfo.angle);
+                const rad = (angle * Math.PI) / 180;
+                const radius = 30; // Node radius
+                
+                return {
+                    x: node.x + radius * Math.cos(rad),
+                    y: node.y + radius * Math.sin(rad)
+                };
+            }
+            
+            updateNodeConnections(nodeId) {
+                // Update all connections connected to this node
+                this.connections.forEach(conn => {
+                    if (conn.from.nodeId === nodeId || conn.to.nodeId === nodeId) {
+                        if (conn.path) {
+                            const pathData = this.calculateOrthogonalPath(
+                                this.nodes.get(conn.from.nodeId),
+                                this.nodes.get(conn.to.nodeId),
+                                conn
+                            );
+                            conn.path.setAttribute('d', pathData);
+                        }
+                        if (conn.id === this.selectedConnection) {
+                            this.renderConnectionHandles(conn);
+                        }
+                    }
+                });
+            }
+            
+            selectNode(nodeId) {
+                // Remove previous selection
+                document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+                
+                const node = this.nodes.get(nodeId);
+                if (node) {
+                    node.element.classList.add('selected');
+                    this.selectedNode = nodeId;
+                    document.getElementById('selected-info').textContent = `${node.type} (${nodeId})`;
+                    // Populate device assignment dropdown (async)
+                    try {
+                        setTimeout(() => populateDeviceSelect(node.deviceId || null), 0);
+                    } catch (e) {
+                        console.warn('populateDeviceSelect not available yet');
+                    }
+                }
+            }
+            
+            selectConnection(connectionId) {
+                // Remove previous selection
+                document.querySelectorAll('.flow-line.active').forEach(l => l.classList.remove('active'));
+                this.clearConnectionHandles();
+                
+                const connection = this.connections.find(c => c.id === connectionId);
+                if (connection && connection.path) {
+                    connection.path.classList.add('active');
+                    this.selectedConnection = connectionId;
+                    this.renderConnectionHandles(connection);
+                }
+            }
+
+            clearConnectionHandles() {
+                while (this.connectionHandlesGroup.firstChild) {
+                    this.connectionHandlesGroup.firstChild.remove();
+                }
+            }
+
+            renderConnectionHandles(connection) {
+                this.clearConnectionHandles();
+                const fromNode = this.nodes.get(connection.from.nodeId);
+                const toNode = this.nodes.get(connection.to.nodeId);
+                if (!fromNode || !toNode) return;
+
+                const fromPoint = this.getConnectionPointPosition(fromNode, connection.from.point);
+                const toPoint = this.getConnectionPointPosition(toNode, connection.to.point);
+
+                ['from', 'to'].forEach(handle => {
+                    const point = handle === 'from' ? fromPoint : toPoint;
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.classList.add('connection-handle');
+                    circle.setAttribute('cx', point.x);
+                    circle.setAttribute('cy', point.y);
+                    circle.setAttribute('r', 6);
+                    circle.dataset.handle = handle;
+                    circle.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        this.startReconnecting(connection, handle, e.clientX, e.clientY);
+                    });
+                    this.connectionHandlesGroup.appendChild(circle);
+                });
+            }
+            
+            deleteConnection(connectionId) {
+                const index = this.connections.findIndex(c => c.id === connectionId);
+                if (index !== -1) {
+                    const connection = this.connections[index];
+                    if (connection.path) {
+                        connection.path.remove();
+                    }
+                    this.connections.splice(index, 1);
+                    if (this.selectedConnection === connectionId) {
+                        this.selectedConnection = null;
+                        this.clearConnectionHandles();
+                    }
+                }
+            }
+            
+            handleNodeRightClick(e, nodeId) {
+                e.preventDefault();
+                if (confirm('Knoten löschen?')) {
+                    this.deleteNode(nodeId);
+                }
+            }
+            
+            deleteNode(nodeId) {
+                const node = this.nodes.get(nodeId);
+                if (!node) return;
+                
+                // Remove connections
+                this.connections = this.connections.filter(conn => {
+                    if (conn.from.nodeId === nodeId || conn.to.nodeId === nodeId) {
+                        if (conn.path) conn.path.remove();
+                        return false;
+                    }
+                    return true;
+                });
+                
+                // Remove node element
+                node.element.remove();
+                
+                // Remove from map
+                this.nodes.delete(nodeId);
+                
+                // Clear selection if this node was selected
+                if (this.selectedNode === nodeId) {
+                    this.selectedNode = null;
+                    document.getElementById('selected-info').textContent = 'Keine';
+                }
+            }
+            
+            handleKeyDown(e) {
+                if (e.code === 'Delete' && this.selectedNode) {
+                    this.deleteNode(this.selectedNode);
+                } else if (e.code === 'Space' && this.selectedNode) {
+                    e.preventDefault();
+                    this.rotateNode(this.selectedNode);
+                }
+            }
+            
+            rotateNode(nodeId) {
+                const node = this.nodes.get(nodeId);
+                if (!node) return;
+                
+                // Simple rotation animation
+                node.element.style.transition = 'transform 0.3s';
+                node.element.style.transform = 'rotate(90deg)';
+                
+                setTimeout(() => {
+                    node.element.style.transition = '';
+                    node.element.style.transform = '';
+                }, 300);
+            }
+            
+            updateCanvasSize() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.setAttribute('width', rect.width);
+                this.canvas.setAttribute('height', rect.height);
+                this.canvas.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+            }
+            
+            renderGrid() {
+                if (!this.gridEnabled) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const gridSize = 20;
+                
+                for (let x = 0; x < rect.width; x += gridSize) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x);
+                    line.setAttribute('y1', 0);
+                    line.setAttribute('x2', x);
+                    line.setAttribute('y2', rect.height);
+                    line.setAttribute('stroke', '#333');
+                    line.setAttribute('stroke-width', '0.5');
+                    this.canvas.insertBefore(line, this.flowLinesGroup);
+                }
+                
+                for (let y = 0; y < rect.height; y += gridSize) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', 0);
+                    line.setAttribute('y1', y);
+                    line.setAttribute('x2', rect.width);
+                    line.setAttribute('y2', y);
+                    line.setAttribute('stroke', '#333');
+                    line.setAttribute('stroke-width', '0.5');
+                    this.canvas.insertBefore(line, this.flowLinesGroup);
+                }
+            }
+            
+            saveConfiguration() {
+                const config = {
+                    nodes: Array.from(this.nodes.entries()).map(([id, node]) => ({
+                        id,
+                        type: node.type,
+                        x: node.x,
+                        y: node.y,
+                        deviceId: node.deviceId || null
+                    })),
+                    connections: this.connections.map(conn => ({
+                        id: conn.id,
+                        from: conn.from,
+                        to: conn.to
+                    }))
+                };
+                
+                console.log('Configuration saved:', config);
+                localStorage.setItem('flowEditorConfig', JSON.stringify(config));
+                alert('Konfiguration gespeichert!');
+            }
+            
+            loadConfiguration() {
+                const saved = localStorage.getItem('flowEditorConfig');
+                if (saved) {
+                    const config = JSON.parse(saved);
+                    
+                    // Restore nodes (preserve ids and device assignments)
+                    config.nodes.forEach(nodeConfig => {
+                        this.addNode(nodeConfig.type, nodeConfig.x, nodeConfig.y, nodeConfig.id, nodeConfig.deviceId || null);
+                    });
+                    
+                    // Restore connections
+                    config.connections.forEach(connConfig => {
+                        this.createConnection(connConfig.from, connConfig.to);
+                    });
+                }
+            }
+            
+            resetCanvas() {
+                if (confirm('Editor zurücksetzen?')) {
+                    this.clearAll();
+                    this.loadConfiguration();
+                }
+            }
+            
+            clearAll() {
+                // Clear nodes
+                this.nodes.forEach(node => node.element.remove());
+                this.nodes.clear();
+                
+                // Clear connections
+                this.connections.forEach(conn => {
+                    if (conn.path) conn.path.remove();
+                });
+                this.connections.clear();
+                
+                // Clear selection
+                this.selectedNode = null;
+                document.getElementById('selected-info').textContent = 'Keine';
+                
+                // Reset counter
+                this.nodeIdCounter = 0;
+            }
+            
+            toggleGrid() {
+                this.gridEnabled = !this.gridEnabled;
+                // Re-render canvas to show/hide grid
+                const gridLines = this.canvas.querySelectorAll('line[stroke="#333"]');
+                gridLines.forEach(line => line.style.display = this.gridEnabled ? 'block' : 'none');
+            }
+            
+            toggleSnap() {
+                this.snapEnabled = !this.snapEnabled;
+            }
+        }
+        
+        // Global functions for button handlers
+        let editor;
+        
+        function saveConfiguration() {
+            editor.saveConfiguration();
+        }
+        
+        function resetCanvas() {
+            editor.resetCanvas();
+        }
+        
+        function clearAll() {
+            if (confirm('Alles löschen?')) {
+                editor.clearAll();
+            }
+        }
+        
+        function toggleGrid() {
+            editor.toggleGrid();
+        }
+        
+        function toggleSnap() {
+            editor.toggleSnap();
+        }
+
+        // Populate device select from server config
+        async function populateDeviceSelect(selectedId) {
+            const sel = document.getElementById('device-select');
+            if (!sel) return;
+            sel.innerHTML = '';
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.text = '-- Keines --';
+            sel.appendChild(empty);
+            try {
+                const res = await fetch('/api/config/full');
+                if (!res.ok) throw new Error('Config fetch failed');
+                const cfg = await res.json();
+                const list = [];
+                if (cfg.pvSystems) cfg.pvSystems.forEach(p => list.push({ id: p.id, label: `PV: ${p.name} (${p.id})` }));
+                if (cfg.consumers) cfg.consumers.forEach(c => list.push({ id: c.id, label: `${c.name} (${c.id})` }));
+                list.forEach(it => {
+                    const opt = document.createElement('option');
+                    opt.value = it.id;
+                    opt.text = it.label;
+                    sel.appendChild(opt);
+                });
+                if (selectedId) sel.value = selectedId;
+            } catch (err) {
+                console.warn('Could not populate device list', err);
+            }
+        }
+
+        // Assign selected node to device from dropdown
+        function assignSelectedNodeToDevice() {
+            const sel = document.getElementById('device-select');
+            if (!sel) return;
+            const deviceId = sel.value || null;
+            if (!editor || !editor.selectedNode) {
+                alert('Kein Knoten ausgewählt');
+                return;
+            }
+            const node = editor.nodes.get(editor.selectedNode);
+            if (!node) return;
+            node.deviceId = deviceId;
+            document.getElementById('selected-info').textContent = `${node.type} (${editor.selectedNode})${deviceId ? ' → ' + deviceId : ''}`;
+        }
+        
+        // Initialize editor when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            editor = new FlowEditor();
+            
+            // Try to load saved configuration
+            setTimeout(() => {
+                try {
+                    editor.loadConfiguration();
+                } catch (e) {
+                    console.log('No saved configuration found');
+                }
+            }, 100);
+        });
+    </script>
+</body>
+</html>

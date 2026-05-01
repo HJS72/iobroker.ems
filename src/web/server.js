@@ -76,6 +76,13 @@ function createWebServer(energyManager, port) {
     app.use(express.json());
     app.use(express.static(path.join(__dirname, 'public')));
 
+    // ─── Flow Editor ───────────────────────────────────────────────────
+    
+    // Flow Editor page
+    app.get('/editor', (req, res) => {
+        res.sendFile(path.join(__dirname, 'public', 'flow-editor.html'));
+    });
+
     // ─── REST API ─────────────────────────────────────────────────────
 
     // Build-Version

@@ -43,6 +43,59 @@
   ],
   "consumers": [
     {
+      "name": "Hausverbrauch",
+      "id": "house",
+      "type": "house",
+      "controlMode": "none",
+      "powerSignPositive": "consumption",
+      "energyType": "balance",
+      "datapoints": {
+        "power": "",
+        "energyTotal": ""
+      }
+    },
+    {
+      "name": "Waschmaschine",
+      "id": "wm1",
+      "type": "washer",
+      "controlMode": "recommend_start",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Power",
+        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Energy"
+      }
+    },
+    {
+      "name": "Trockner",
+      "id": "tr1",
+      "type": "dryer",
+      "controlMode": "recommend_start",
+      "powerSignPositive": "consumption",
+      "energyType": "total",
+      "datapoints": {
+        "power": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Power",
+        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Energy"
+      }
+    },
+    {
+      "name": "Zappi",
+      "id": "wallbox",
+      "type": "wallbox",
+      "controlMode": "self_regulating",
+      "powerSignPositive": "consumption",
+      "energyType": "calculated",
+      "datapoints": {
+        "power": "myenergi.0.22407308.ectpSum",
+        "energyTotal": "",
+        "evSoc": "javascript.0.Mercedes.SOC",
+        "evRange": "javascript.0.Mercedes.Range",
+        "evChargeEnd": "javascript.0.Mercedes.EndOfChargeTime",
+        "evBatteryCapacity": "javascript.0.Mercedes.NetCapacity"
+      },
+      "evBatteryCapacity": 19.5
+    },
+    {
       "name": "Ochsner",
       "id": "bwwp",
       "type": "heatpump",
@@ -79,59 +132,6 @@
       "seasons": [
         "summer"
       ]
-    },
-    {
-      "name": "Hausverbrauch",
-      "id": "house",
-      "type": "house",
-      "controlMode": "none",
-      "powerSignPositive": "consumption",
-      "energyType": "balance",
-      "datapoints": {
-        "power": "",
-        "energyTotal": ""
-      }
-    },
-    {
-      "name": "Zappi",
-      "id": "wallbox",
-      "type": "wallbox",
-      "controlMode": "self_regulating",
-      "powerSignPositive": "consumption",
-      "energyType": "calculated",
-      "datapoints": {
-        "power": "myenergi.0.22407308.ectpSum",
-        "energyTotal": "",
-        "evSoc": "javascript.0.Mercedes.SOC",
-        "evRange": "javascript.0.Mercedes.Range",
-        "evChargeEnd": "javascript.0.Mercedes.EndOfChargeTime",
-        "evBatteryCapacity": "javascript.0.Mercedes.NetCapacity"
-      },
-      "evBatteryCapacity": 19.5
-    },
-    {
-      "name": "Waschmaschine",
-      "id": "wm1",
-      "type": "washer",
-      "controlMode": "recommend_start",
-      "powerSignPositive": "consumption",
-      "energyType": "total",
-      "datapoints": {
-        "power": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Power",
-        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2C19F#1.Relay0.Energy"
-      }
-    },
-    {
-      "name": "Trockner",
-      "id": "tr1",
-      "type": "dryer",
-      "controlMode": "recommend_start",
-      "powerSignPositive": "consumption",
-      "energyType": "total",
-      "datapoints": {
-        "power": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Power",
-        "energyTotal": "shelly.0.SHSW-PM#E8DB84D2EC75#1.Relay0.Energy"
-      }
     }
   ],
   "grid": {

@@ -53,6 +53,13 @@ function normalizeVersion(v) {
     return String(v).replace(/^v/i, '');
 }
 
+// Parse build-version 0.YYMMDD.HHMM → Date (UTC)
+function parseBuildVersionDate(v) {
+    const m = String(v || '').match(/^0\.(\d{2})(\d{2})(\d{2})\.(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return new Date(`20${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00Z`);
+}
+
 function buildGitEnv(updateCfg) {
     const env = { ...process.env };
     if (!updateCfg) return env;
@@ -283,8 +290,12 @@ function createWebServer(energyManager, port) {
                         const remoteVersion = normalizeVersion(remoteVersionRaw || '');
                         const assetUrl = (json.assets && json.assets.length > 0) ? json.assets[0].browser_download_url : null;
                         const tarball = json.tarball_url || json.zipball_url || assetUrl || null;
-                        const updateAvailable = remoteVersion && localVersion ? (remoteVersion !== localVersion) : !!remoteVersion;
-                        return res.json({ enabled: true, updateAvailable, localVersion: localVersionRaw, remoteVersion: remoteVersionRaw, downloadUrl: tarball, repo: `${parsed.owner}/${parsed.repo}`, releaseName: json.name || '' });
+                        const releaseDate = json.published_at ? new Date(json.published_at) : null;
+                        const buildDate = parseBuildVersionDate(localVersionRaw);
+                        const updateAvailable = (releaseDate && buildDate)
+                            ? releaseDate > buildDate
+                            : (remoteVersion && localVersion ? remoteVersion !== localVersion : !!remoteVersion);
+                        return res.json({ enabled: true, updateAvailable, localVersion: localVersionRaw, remoteVersion: remoteVersionRaw, releaseDate: json.published_at || null, downloadUrl: tarball, repo: `${parsed.owner}/${parsed.repo}`, releaseName: json.name || '' });
                     }
                 } catch (e) { /* ignore and continue */ }
 

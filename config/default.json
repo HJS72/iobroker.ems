@@ -156,7 +156,7 @@
   ,"update": {
     "enabled": true,
     "remote": "origin",
-    "repoUrl": "",
+    "repoUrl": "https://github.com/HJS72/iobroker.ems",
     "branch": "main",
     "sshKey": "",
     "sshCommand": "",

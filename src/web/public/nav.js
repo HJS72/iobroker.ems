@@ -172,8 +172,13 @@ async function checkForUpdate() {
         const versionEl = document.getElementById('build-version');
         if (data.updateAvailable && link) {
             link.style.display = '';
-            badge.textContent = data.behind;
-            document.getElementById('nav-update-text').textContent = `Update (${data.behind} Commit${data.behind > 1 ? 's' : ''})`;
+            if (data.remoteVersion) {
+                badge.textContent = '';
+                document.getElementById('nav-update-text').textContent = `Update ${data.remoteVersion}`;
+            } else {
+                badge.textContent = data.behind || '';
+                document.getElementById('nav-update-text').textContent = `Update (${data.behind} Commit${data.behind > 1 ? 's' : ''})`;
+            }
             // Indicator am Version-Text
             if (versionEl) versionEl.innerHTML += ' <span class="update-dot" title="Update verfügbar" onclick="showUpdateDialog()">●</span>';
         }
@@ -187,15 +192,30 @@ function showUpdateDialog() {
     const body = document.getElementById('update-body');
     if (!dialog) return;
     if (_updateInfo && _updateInfo.updateAvailable) {
-        const commits = _updateInfo.commits ? _updateInfo.commits.split('\n').map(c => `<div class="update-commit">${c}</div>`).join('') : '';
-        body.innerHTML = `
-            <div class="update-info">
-                <div><strong>Lokal:</strong> ${_updateInfo.localHash}</div>
-                <div><strong>Remote:</strong> ${_updateInfo.remoteHash}</div>
-                <div><strong>${_updateInfo.behind} neue${_updateInfo.behind > 1 ? '' : 'r'} Commit${_updateInfo.behind > 1 ? 's' : ''}:</strong></div>
-            </div>
-            <div class="update-commits">${commits}</div>
-        `;
+        if (_updateInfo.remoteVersion) {
+            // GitHub Release-basiert: Versionsvergleich per Datum
+            const releaseDate = _updateInfo.releaseDate
+                ? new Date(_updateInfo.releaseDate).toLocaleDateString('de-DE')
+                : '';
+            body.innerHTML = `
+                <div class="update-info">
+                    <div><strong>Installiert:</strong> ${_updateInfo.localVersion || '–'}</div>
+                    <div><strong>Verfügbar:</strong> ${_updateInfo.remoteVersion}${releaseDate ? ' (veröffentlicht ' + releaseDate + ')' : ''}</div>
+                    ${_updateInfo.releaseName ? '<div style="color:var(--text-dim);margin-top:4px">' + _updateInfo.releaseName + '</div>' : ''}
+                </div>
+            `;
+        } else {
+            // Git Commit-basiert
+            const commits = _updateInfo.commits ? _updateInfo.commits.split('\n').map(c => `<div class="update-commit">${c}</div>`).join('') : '';
+            body.innerHTML = `
+                <div class="update-info">
+                    <div><strong>Lokal:</strong> ${_updateInfo.localHash}</div>
+                    <div><strong>Remote:</strong> ${_updateInfo.remoteHash}</div>
+                    <div><strong>${_updateInfo.behind} neue${_updateInfo.behind > 1 ? '' : 'r'} Commit${_updateInfo.behind > 1 ? 's' : ''}:</strong></div>
+                </div>
+                <div class="update-commits">${commits}</div>
+            `;
+        }
     } else {
         body.innerHTML = '<p>Keine Updates verfügbar.</p>';
     }

@@ -15,11 +15,11 @@ function buildVersion() {
         const ts = Number(gitTimestamp) * 1000;
         if (Number.isFinite(ts) && ts > 0) {
             const commitDate = new Date(ts);
-            const yy = String(commitDate.getFullYear()).slice(-2);
-            const mm = String(commitDate.getMonth() + 1).padStart(2, '0');
-            const dd = String(commitDate.getDate()).padStart(2, '0');
-            const hh = String(commitDate.getHours()).padStart(2, '0');
-            const mi = String(commitDate.getMinutes()).padStart(2, '0');
+            const yy = String(commitDate.getUTCFullYear()).slice(-2);
+            const mm = String(commitDate.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(commitDate.getUTCDate()).padStart(2, '0');
+            const hh = String(commitDate.getUTCHours()).padStart(2, '0');
+            const mi = String(commitDate.getUTCMinutes()).padStart(2, '0');
             return `0.${yy}${mm}${dd}.${hh}${mi}`;
         }
     } catch (err) {

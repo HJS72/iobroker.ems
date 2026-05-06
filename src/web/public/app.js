@@ -57,6 +57,26 @@ async function loadPvForecast() {
 }
 
 // ─── Power Cards ──────────────────────────────────────────────────
+function getPvAcDisplayPower(pv, sys) {
+    const acTotal = Number(sys?.power) || 0;
+    if (!pv?.hasBattery) return acTotal;
+
+    const pvAcPure = Number(sys?.extra?.pvAcPure);
+    if (Number.isFinite(pvAcPure)) return Math.max(0, pvAcPure);
+
+    const batteryAc = Number(sys?.extra?.batteryAcPower) || 0;
+    return Math.max(0, acTotal - batteryAc);
+}
+
+function getPvToHouseAcPower(pv, sys) {
+    const acTotal = Number(sys?.extra?.acPower ?? sys?.power) || 0;
+    if (!pv?.hasBattery) return acTotal;
+
+    const batteryAc = Number(sys?.extra?.batteryAcPower) || 0;
+    const batteryDischargeAc = Math.max(0, batteryAc);
+    return Math.max(0, acTotal - batteryDischargeAc);
+}
+
 function updatePowerCards(data) {
     const container = document.getElementById('power-cards');
     let html = '';
@@ -65,7 +85,9 @@ function updatePowerCards(data) {
 
     for (const pv of appConfig.pvSystems) {
         const sys = data.systems?.[pv.id];
-        const power = sys?.power || 0;
+        const power = getPvAcDisplayPower(pv, sys);
+        const batteryAcPower = Number(sys?.extra?.batteryAcPower) || 0;
+        const batteryState = batteryAcPower > 15 ? '▶ Entladen' : (batteryAcPower < -15 ? '◀ Laden' : '⏸ Standby');
         const dpShort = pv.datapoints?.power ? pv.datapoints.power.split('.').pop() : '';
         html += `
             <div class="power-card pv">
@@ -73,9 +95,9 @@ function updatePowerCards(data) {
                 <div class="pc-value">${formatPower(power)}</div>
                 <div class="pc-unit">${formatEnergy(sys?.energyTotal)} heute</div>
                 ${pv.hasBattery && sys?.extra ? `
-                    <div class="pc-unit">☀️ PV: ${formatPower(sys.extra.pvAcPure)} | 🔋 ${sys.extra.batterySoc != null ? sys.extra.batterySoc.toFixed(0) + '%' : '–'}</div>
-                    <div class="pc-unit">${sys.extra.batteryAcPower != null ? (sys.extra.batteryAcPower > 0 ? '▶ Entladen' : '◀ Laden') + ' ' + formatPower(Math.abs(sys.extra.batteryAcPower)) + ' AC' : '–'}</div>
-                    <div class="pc-unit" style="font-size:0.6rem;opacity:0.5">η=${sys.extra.inverterEfficiency != null ? sys.extra.inverterEfficiency + '%' : '–'}</div>
+                    <div class="pc-unit">☀️ PV: ${formatPower(power)} | 🔋 ${sys.extra.batterySoc?.toFixed(0)}%</div>
+                    <div class="pc-unit">${batteryState} ${formatPower(Math.abs(batteryAcPower))} AC</div>
+                    <div class="pc-unit" style="font-size:0.6rem;opacity:0.5">η=${sys.extra.inverterEfficiency}%</div>
                 ` : ''}
                 ${dpShort ? `<div class="pc-dp" title="${pv.datapoints.power}">${dpShort}</div>` : ''}
             </div>`;
@@ -204,15 +226,9 @@ function updatePvChart(data) {
     const combinedActual = data.combinedActual || {};
     const actualValues = new Array(24).fill(null);
     let hasActual = false;
-    const currentHour = new Date().getHours();
-    
     for (const [hour, watts] of Object.entries(combinedActual)) {
-        const hourInt = parseInt(hour);
-        // Nur Ist-Werte bis zur aktuellen Stunde anzeigen
-        if (hourInt <= currentHour) {
-            actualValues[hourInt] = watts;
-            hasActual = true;
-        }
+        actualValues[parseInt(hour)] = watts;
+        hasActual = true;
     }
     if (hasActual) {
         datasets.push({
@@ -364,18 +380,27 @@ function updateEnergyFlow(data) {
     let pvTotal = 0;
     let batteryPower = 0;
     let batterySoc = null;
-    let hasBattery = false;
+    const batteryPv = appConfig.pvSystems.find(pv => pv.hasBattery);
+    const hasBattery = !!batteryPv;
 
     for (const pv of appConfig.pvSystems) {
         const sys = data.systems?.[pv.id];
-        const power = sys?.power || 0;
-        pvSystems.push({ id: pv.id, name: pv.name, power, hasBattery: pv.hasBattery });
-        pvTotal += power;
-        if (pv.hasBattery && sys?.extra) {
-            hasBattery = true;
-            batteryPower = sys.extra.batteryAcPower || 0;
-            batterySoc = sys.extra.batterySoc;
-        }
+        const flowPower = getPvToHouseAcPower(pv, sys);
+        const iconPower = getPvAcDisplayPower(pv, sys);
+        pvSystems.push({ id: pv.id, name: pv.name, flowPower, iconPower, hasBattery: pv.hasBattery });
+        pvTotal += flowPower;
+    }
+
+    // Batterie-Status robust bestimmen (auch wenn einzelne Felder temporär fehlen)
+    if (batteryPv) {
+        const batSys = data.systems?.[batteryPv.id];
+        const batExtra = batSys?.extra || {};
+        const acPower = Number(batSys?.power) || 0;
+        const pvAcPure = Number(batExtra.pvAcPure) || 0;
+        const byDatapoint = Number(batExtra.batteryAcPower) || 0;
+        const byResidual = acPower - pvAcPure;
+        batteryPower = Math.abs(byDatapoint) < 20 && Math.abs(byResidual) >= 20 ? byResidual : byDatapoint;
+        batterySoc = batExtra.batterySoc;
     }
 
     const gridSys = data.systems?.grid;
@@ -400,8 +425,8 @@ function updateEnergyFlow(data) {
     const wbIdx = houseConsumers.findIndex(c => c.id === 'wallbox');
     if (wbIdx >= 0) houseConsumers.push(houseConsumers.splice(wbIdx, 1)[0]);
 
-    const batteryCharging = batteryPower < 0;    // batteryAcPower < 0 = Laden
-    const batteryDischarging = batteryPower > 0; // batteryAcPower > 0 = Entladen
+    const batteryCharging = batteryPower < 0;
+    const batteryDischarging = batteryPower > 0;
     const batteryAbsPower = Math.abs(batteryPower);
 
     // ── Layout (orthogonal) ──
@@ -441,10 +466,21 @@ function updateEnergyFlow(data) {
     // Defs
     svg += `<defs>
         <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <marker id="arrow-green" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#3dd68c"/></marker>
+        <marker id="arrow-red" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f74f4f"/></marker>
+        <marker id="arrow-yellow" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7c948"/></marker>
+        <marker id="arrow-orange" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#ff8c42"/></marker>
+        <marker id="arrow-bat" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#22c55e"/></marker>
+        <marker id="arrow-consumer" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#f7a94f"/></marker>
+        <marker id="arrow-teal" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
+        <marker id="arrow-car" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto"><polygon points="0,0 10,3 0,6" fill="#10b981"/></marker>
     </defs>`;
 
     // ── Orthogonale Fluss-Linie ──
     // waypoints: Array von [x,y] Koordinaten
+    // Farbe → Arrow-Marker-ID Mapping
+    const arrowMarkers = { '#f7c948': 'arrow-yellow', '#ff8c42': 'arrow-orange', '#22c55e': 'arrow-bat', '#3dd68c': 'arrow-green', '#f74f4f': 'arrow-red', '#f7a94f': 'arrow-consumer', '#10b981': 'arrow-car' };
+
     function flowLine(waypoints, power, color, labelAtEnd) {
         if (power <= 0) return '';
         const thick = Math.max(1.5, Math.min(8, power / 600));
@@ -453,6 +489,7 @@ function updateEnergyFlow(data) {
         for (let i = 1; i < waypoints.length; i++) {
             d += ` L${waypoints[i][0]},${waypoints[i][1]}`;
         }
+        const markerId = arrowMarkers[color] || 'arrow-yellow';
         const dashLen = 8 + thick * 2;
         const gap = dashLen * 0.8;
         const speed = Math.max(0.4, 2 - power / 3000); // schneller bei mehr Leistung
@@ -472,21 +509,17 @@ function updateEnergyFlow(data) {
     const pvBusY = 105; // Horizontale PV-Sammellinie
 
     // PV1 → Haus (Solaredge links, runter zum Bus, rüber zu Haus)
-    const pv1Power = pvSystems[0]?.power || 0;
-    if (pv1Power > 0) {
-        svg += flowLine([[pv1.x, pv1.y + 26], [pv1.x, pvBusY], [busX, pvBusY]], pv1Power, '#f7c948');
+    const pv1FlowPower = pvSystems[0]?.flowPower || 0;
+    const pv1IconPower = pvSystems[0]?.iconPower || 0;
+    if (pv1FlowPower > 0) {
+        svg += flowLine([[pv1.x, pv1.y + 26], [pv1.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv1FlowPower, '#f7c948');
     }
 
     // PV2 → Haus (Hoymiles mitte, direkt runter)
-    const pv2Power = pvSystems[1]?.power || 0;
-    if (pv2Power > 0) {
-        svg += flowLine([[pv2.x, pv2.y + 26], [pv2.x, pvBusY], [busX, pvBusY]], pv2Power, '#f7c948');
-    }
-
-    // PV-Gesamt vom Bus zum Haus (nur wenn Gesamt-PV > 0)
-    const totalPvPower = pv1Power + pv2Power;
-    if (totalPvPower > 0) {
-        svg += flowLine([[busX, pvBusY], [busX, houseXY.y - houseR]], totalPvPower, '#f7c948');
+    const pv2FlowPower = pvSystems[1]?.flowPower || 0;
+    const pv2IconPower = pvSystems[1]?.iconPower || 0;
+    if (pv2FlowPower > 0) {
+        svg += flowLine([[pv2.x, pv2.y + 26], [pv2.x, pvBusY], [busX, pvBusY], [busX, houseXY.y - houseR]], pv2FlowPower, '#ff8c42');
     }
 
     // Batterie ← PV (laden): von PV1 runter zur Batterie
@@ -508,55 +541,13 @@ function updateEnergyFlow(data) {
         svg += flowLine([[gridXY.x, gridXY.y - 26], [gridXY.x, 340], [houseXY.x, 340], [houseXY.x, houseXY.y + houseR]], purchase, '#f74f4f');
     }
 
-    // Haus → Verbraucher mit spezifischen Andockpunkten
+    // Haus → Verbraucher (orthogonal rechts)
     const cBusX = 560;
-    
-    // 8 Andockpunkte am Haus (im Uhrzeigersinn: 12, 1:30, 3, 4:30, 6, 7:30, 9, 10:30)
-    const getConnectionPoint = (pointNumber) => {
-        const angles = [0, 45, 90, 135, 180, 225, 270, 315]; // Grad
-        // 90° im Uhrzeigersinn drehen (von SVG-Mathematik zu visueller Uhrzeit)
-        const adjustedAngles = angles.map(a => (a - 90 + 360) % 360);
-        const angleRad = (adjustedAngles[pointNumber - 1] * Math.PI) / 180; // pointNumber: 1-8
-        const pointX = houseXY.x + houseR * Math.cos(angleRad);
-        const pointY = houseXY.y + houseR * Math.sin(angleRad);
-        return { x: pointX, y: pointY };
-    };
-    
     houseConsumers.forEach((c, i) => {
         if (c.power > 0) {
             const cy = cStartY + i * cSpacing;
             const lineColor = c.id === 'wallbox' ? '#10b981' : '#f7a94f';
-            
-            // Spezifische Andockpunkte zuweisen:
-            let connectionPoint;
-            if (c.id === 'house' || c.id === 'wm1' || c.id === 'tr1') {
-                // Hausverbrauch, Waschmaschine, Trockner → Ausgang Nr.2 (1:30 Uhr)
-                connectionPoint = getConnectionPoint(2);
-            } else if (c.id === 'bwwp' || c.id === 'klima') {
-                // Ochsner, Klimaanlage → Ausgang Nr.3 (3:00 Uhr)
-                connectionPoint = getConnectionPoint(3);
-            } else if (c.id === 'wallbox') {
-                // Zappi → Ausgang Nr.4 (4:30 Uhr)
-                connectionPoint = getConnectionPoint(4);
-            } else {
-                // Andere Verbraucher → Ausgang Nr.1 (12:00 Uhr)
-                connectionPoint = getConnectionPoint(1);
-            }
-            
-            // Flusslinie vom Andockpunkt zum Verbraucher (vertikal/horizontal)
-            if (connectionPoint.x > houseXY.x) {
-                // Rechte Seite: horizontal nach rechts, dann vertikal zum Verbraucher
-                svg += flowLine([[connectionPoint.x, connectionPoint.y], [cX - 24, connectionPoint.y], [cX - 24, cy]], c.power, lineColor, true);
-            } else if (connectionPoint.x < houseXY.x) {
-                // Linke Seite: horizontal nach links, dann vertikal zum Verbraucher
-                svg += flowLine([[connectionPoint.x, connectionPoint.y], [cX - 24, connectionPoint.y], [cX - 24, cy]], c.power, lineColor, true);
-            } else if (connectionPoint.y < houseXY.y) {
-                // Oben: vertikal nach oben, dann horizontal zum Verbraucher
-                svg += flowLine([[connectionPoint.x, connectionPoint.y], [connectionPoint.x, cy - 30], [cX - 24, cy - 30], [cX - 24, cy]], c.power, lineColor, true);
-            } else {
-                // Unten: vertikal nach unten, dann horizontal zum Verbraucher
-                svg += flowLine([[connectionPoint.x, connectionPoint.y], [connectionPoint.x, cy + 30], [cX - 24, cy + 30], [cX - 24, cy]], c.power, lineColor, true);
-            }
+            svg += flowLine([[houseXY.x + houseR, houseXY.y], [cBusX, houseXY.y], [cBusX, cy], [cX - 24, cy]], c.power, lineColor, true);
         }
     });
 
@@ -590,13 +581,14 @@ function updateEnergyFlow(data) {
     }
 
     // PV1 & PV2 – Fluss geht nach unten → Label oben
-    svg += drawNode(pv1.x, pv1.y, 26, 'sun', pvSystems[0]?.name || 'PV1', pv1Power, '#f7c948', pv1Power > 0, 20, 'top');
-    svg += drawNode(pv2.x, pv2.y, 26, 'sun', pvSystems[1]?.name || 'PV2', pv2Power, '#f7c948', pv2Power > 0, 20, 'top');
+    svg += drawNode(pv1.x, pv1.y, 26, 'sun', pvSystems[0]?.name || 'PV1', pv1IconPower, '#f7c948', pv1IconPower > 0, 20, 'top');
+    svg += drawNode(pv2.x, pv2.y, 26, 'sun', pvSystems[1]?.name || 'PV2', pv2IconPower, '#ff8c42', pv2IconPower > 0, 20, 'top');
 
     // Batterie – Fluss geht nach rechts/oben → Label links
     if (hasBattery) {
         const batLabel = `Batterie ${batterySoc != null ? batterySoc.toFixed(0) + '%' : ''}`;
-        svg += drawNode(batXY.x, batXY.y, 28, 'battery', batLabel, batteryAbsPower, '#22c55e', batteryAbsPower > 0, 22, 'left');
+        const batColor = batteryDischarging ? '#22c55e' : (batteryCharging ? '#f7a94f' : '#4fc3f7');
+        svg += drawNode(batXY.x, batXY.y, 28, 'battery', batLabel, batteryAbsPower, batColor, true, 22, 'left');
     }
 
     // HAUS (groß) – zentraler Hub → Label unten

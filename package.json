@@ -19,6 +19,7 @@
     "@iobroker/adapter-core": "^3.2.3"
   },
   "scripts": {
-    "check": "node --check main.js"
+    "check": "node --check main.js",
+    "build:admin": "cd src-admin && npm install && npm run build && rm -rf ../admin/custom && mkdir -p ../admin/custom && cp -R build/. ../admin/custom/"
   }
 }

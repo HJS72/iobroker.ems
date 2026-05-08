@@ -113,26 +113,17 @@
           "hidden": "data.type === 'Berechnung'"
         },
         {
-          "type": "jsonEditor",
-          "attr": "berechnungTerms",
-          "title": "Formel-Editor (Berechnung)",
-          "width": "32%",
-          "help": "JSON-Array: [{\"id\":\"ems.0.grid\",\"op\":\"+\"},{\"id\":\"ems.0.pv\",\"op\":\"-\"}]",
-          "validator": "data.type !== 'Berechnung' || (Array.isArray(data.berechnungTerms) && data.berechnungTerms.length > 0)",
-          "validatorNoSaveOnError": true,
-          "validatorErrorText": "Bitte fuer Berechnung mindestens einen gueltigen Term im Formel-Editor angeben.",
-          "hidden": "data.type !== 'Berechnung'"
-        },
-        {
-          "type": "text",
+          "type": "custom",
           "attr": "berechnungFormula",
-          "hidden": true,
-          "onChange": {
-            "alsoDependsOn": [
-              "berechnungTerms"
-            ],
-            "calculateFunc": "if (!Array.isArray(data.berechnungTerms)) { return ''; } var out = ''; for (var i = 0; i < data.berechnungTerms.length; i++) { var t = data.berechnungTerms[i] || {}; var id = (t.id || '').toString().trim(); if (!id) { continue; } if (out) { out += ' ' + ((t.op === '-') ? '-' : '+') + ' '; } out += id; } return out;"
-          }
+          "title": "Formel (Berechnung)",
+          "width": "32%",
+          "url": "custom/customComponents.js",
+          "name": "EmsAdminSet/Components/FormulaEditor",
+          "bundlerType": "module",
+          "validator": "data.type !== 'Berechnung' || !!(data.berechnungFormula || '').trim()",
+          "validatorNoSaveOnError": true,
+          "validatorErrorText": "Bitte fuer Berechnung eine gueltige Formel eingeben.",
+          "hidden": "data.type !== 'Berechnung'"
         },
         {
           "type": "text",

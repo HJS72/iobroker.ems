@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "news": {
+      "0.2.1": {
+        "en": "Remove config validation gate, save button always active",
+        "de": "Konfigurationspruefung entfernt, Speichern-Button immer aktiv"
+      },
       "0.2.0": {
         "en": "Add generic device datapoints (device.0-2: name, enabled, windows) for external planner integration",
         "de": "Generische Geraete-Datenpunkte (device.0-2: name, enabled, windows) fuer externe Planer-Integration hinzugefuegt"

@@ -1,6 +1,6 @@
 {
   "name": "iobroker.ems",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ioBroker adapter for house consumption and energy-from-power calculations",
   "author": "GitHub Copilot",
   "license": "MIT",

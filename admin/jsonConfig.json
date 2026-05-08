@@ -8,49 +8,6 @@
       "newLine": true,
       "sm": 12
     },
-    "validateConfig": {
-      "type": "sendTo",
-      "label": "Konfiguration pruefen",
-      "adapter": "ems",
-      "command": "validateConfig",
-      "data": {
-        "calculations": "${data.calculations}",
-        "calculationsJson": "${data._calculationsJson}"
-      },
-      "useNative": true,
-      "showProcess": true,
-      "variant": "contained",
-      "result": {
-        "en": "Configuration check successful",
-        "de": "Konfigurationspruefung erfolgreich"
-      },
-      "error": {
-        "en": "Configuration check failed",
-        "de": "Konfigurationspruefung fehlgeschlagen"
-      },
-      "newLine": true,
-      "sm": 4
-    },
-    "validationHint": {
-      "type": "staticText",
-      "text": "Nach jeder Aenderung bitte zuerst 'Konfiguration pruefen' ausfuehren. Speichern ist erst danach moeglich.",
-      "newLine": false,
-      "sm": 8
-    },
-    "_validationPassed": {
-      "type": "checkbox",
-      "hidden": true,
-      "default": false,
-      "validator": "data._validationPassed === true",
-      "validatorNoSaveOnError": true,
-      "validatorErrorText": "Bitte zuerst 'Konfiguration pruefen' ausfuehren.",
-      "onChange": {
-        "alsoDependsOn": [
-          "calculations"
-        ],
-        "calculateFunc": "return false"
-      }
-    },
     "_calculationsJson": {
       "type": "text",
       "hidden": true,
@@ -67,9 +24,6 @@
       "label": "Berechnungen",
       "newLine": true,
       "sm": 12,
-      "validator": "data._validationPassed === true",
-      "validatorNoSaveOnError": true,
-      "validatorErrorText": "Bitte zuerst 'Konfiguration pruefen' ausfuehren.",
       "items": [
         {
           "type": "checkbox",

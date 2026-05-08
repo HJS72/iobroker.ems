@@ -1,0 +1,6 @@
+node_modules/
+src-admin/node_modules/
+src-admin/build/
+src-admin/.vite/
+*.log
+.DS_Store

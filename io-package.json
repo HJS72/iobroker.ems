@@ -32,8 +32,8 @@
     "messagebox": true,
     "materialize": true,
     "enabled": true,
-    "extIcon": "https://raw.githubusercontent.com/ioBroker/ioBroker.ems/master/admin/ems.png",
-    "icon": "ems.png",
+    "extIcon": "https://raw.githubusercontent.com/HJS72/iobroker.ems/main/admin/ems.svg",
+    "icon": "ems.svg",
     "readme": "https://github.com/ioBroker/ioBroker.ems/blob/main/README.md",
     "loglevel": "info",
     "adminUI": {

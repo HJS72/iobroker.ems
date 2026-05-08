@@ -4,7 +4,7 @@
   "items": {
     "info": {
       "type": "staticText",
-      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.X.calculated.<name> angelegt.",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.X.calculated.<name> angelegt. Verbrauch-Formel: 'sourceId1 +/- sourceId2 +/- ...' (z.B. 'grid.power - pv.power + battery.power').",
       "newLine": true,
       "sm": 12
     },
@@ -25,7 +25,7 @@
           "type": "select",
           "attr": "type",
           "title": "Berechnungsart",
-          "width": "16%",
+          "width": "12%",
           "options": [
             {
               "label": "Energie",
@@ -50,49 +50,51 @@
           "type": "objectId",
           "attr": "sourceId",
           "title": "Quell-Datenpunkt",
-          "width": "24%",
+          "width": "18%",
           "filter": {
             "type": "state"
-          }
+          },
+          "showIf": "{type} !== 'Verbrauch'"
+        },
+        {
+          "type": "text",
+          "attr": "verbrauchFormula",
+          "title": "Formel (Verbrauch)",
+          "width": "18%",
+          "placeholder": "source1 + source2 - source3",
+          "showIf": "{type} === 'Verbrauch'"
         },
         {
           "type": "text",
           "attr": "targetName",
           "title": "Ziel-Datenpunktname",
-          "width": "22%",
+          "width": "16%",
           "default": "my_calc"
         },
         {
-          "type": "select",
-          "attr": "verbrauchType",
-          "title": "Typ (nur Verbrauch)",
-          "width": "14%",
-          "options": [
-            {
-              "label": "Verbraucher (+)",
-              "value": "consumer"
-            },
-            {
-              "label": "Erzeuger (-)",
-              "value": "producer"
-            }
-          ],
-          "default": "consumer"
+          "type": "checkbox",
+          "attr": "invertValue",
+          "title": "Negative invertieren",
+          "width": "12%",
+          "default": false,
+          "showIf": "{type} === 'Energie' || {type} === 'EnergieTag'"
         },
         {
           "type": "number",
           "attr": "averageSeconds",
-          "title": "Dauer Sek. (nur Durchschnitt)",
-          "width": "16%",
+          "title": "Fenster (Sek.)",
+          "width": "10%",
           "min": 1,
-          "default": 300
+          "default": 300,
+          "showIf": "{type} === 'Durchschnitt'"
         },
         {
           "type": "checkbox",
           "attr": "onlyPositive",
-          "title": "Nur positive Werte (Energie)",
-          "width": "16%",
-          "default": true
+          "title": "Nur positive",
+          "width": "10%",
+          "default": true,
+          "showIf": "{type} === 'Energie'"
         }
       ]
     }

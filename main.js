@@ -45,7 +45,7 @@ class EmsAdapter extends utils.Adapter {
     }
 
     await this.restoreInitialValues();
-    await this.recalculateAllVerbrauchTargets();
+    await this.recalculateAllVerbrauch();
 
     this.dayChangeInterval = this.setInterval(() => {
       void this.checkDailyReset();
@@ -89,7 +89,7 @@ class EmsAdapter extends utils.Adapter {
       }
     }
 
-    await this.recalculateVerbrauchTargetsForSource(id);
+    await this.recalculateVerbrauchForSources(id);
   }
 
   getInputStateIds() {
@@ -97,6 +97,11 @@ class EmsAdapter extends utils.Adapter {
     for (const calc of this.calculations) {
       if (calc.sourceId) {
         ids.add(calc.sourceId);
+      }
+      if (calc.formulaSources && Array.isArray(calc.formulaSources)) {
+        for (const src of calc.formulaSources) {
+          ids.add(src);
+        }
       }
     }
     return Array.from(ids);
@@ -119,7 +124,7 @@ class EmsAdapter extends utils.Adapter {
       }
 
       const sourceId = typeof row.sourceId === "string" ? row.sourceId.trim() : "";
-      if (!sourceId) {
+      if (!sourceId && type !== TYPE_VERBRAUCH) {
         this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: Quell-Datenpunkt fehlt`);
         continue;
       }
@@ -130,16 +135,40 @@ class EmsAdapter extends utils.Adapter {
         continue;
       }
 
-      const calc = {
-        id: `calc_${i + 1}`,
-        type,
-        sourceId,
-        targetName,
-        targetId: this.buildTargetStateId(targetName),
-        onlyPositive: row.onlyPositive !== false,
-        averageSeconds: this.parsePositiveNumber(row.averageSeconds, 300),
-        verbrauchType: row.verbrauchType === "producer" ? "producer" : "consumer"
-      };
+      let calc;
+
+      if (type === TYPE_VERBRAUCH) {
+        const formula = typeof row.verbrauchFormula === "string" ? row.verbrauchFormula.trim() : "";
+        if (!formula) {
+          this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: Verbrauch-Formel fehlt`);
+          continue;
+        }
+        const parsed = this.parseVerbrauchFormula(formula);
+        if (!parsed.sources || parsed.sources.length === 0) {
+          this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: keine Quellen in Formel gefunden`);
+          continue;
+        }
+        calc = {
+          id: `calc_${i + 1}`,
+          type,
+          targetName,
+          targetId: this.buildTargetStateId(targetName),
+          verbrauchFormula: formula,
+          formulaSources: parsed.sources,
+          formulaOps: parsed.ops
+        };
+      } else {
+        calc = {
+          id: `calc_${i + 1}`,
+          type,
+          sourceId,
+          targetName,
+          targetId: this.buildTargetStateId(targetName),
+          onlyPositive: row.onlyPositive !== false,
+          invertValue: row.invertValue === true,
+          averageSeconds: this.parsePositiveNumber(row.averageSeconds, 300)
+        };
+      }
 
       result.push(calc);
     }
@@ -208,18 +237,21 @@ class EmsAdapter extends utils.Adapter {
     this.verbrauchTargetsBySource.clear();
 
     for (const calc of this.calculations) {
-      const bySource = this.calcsBySource.get(calc.sourceId) || [];
-      bySource.push(calc);
-      this.calcsBySource.set(calc.sourceId, bySource);
+      if (calc.sourceId) {
+        const bySource = this.calcsBySource.get(calc.sourceId) || [];
+        bySource.push(calc);
+        this.calcsBySource.set(calc.sourceId, bySource);
+      }
 
       if (calc.type === TYPE_VERBRAUCH) {
-        const targetRows = this.verbrauchByTarget.get(calc.targetId) || [];
-        targetRows.push(calc);
-        this.verbrauchByTarget.set(calc.targetId, targetRows);
-
-        const targetSet = this.verbrauchTargetsBySource.get(calc.sourceId) || new Set();
-        targetSet.add(calc.targetId);
-        this.verbrauchTargetsBySource.set(calc.sourceId, targetSet);
+        this.verbrauchByTarget.set(calc.targetId, calc);
+        if (calc.formulaSources && Array.isArray(calc.formulaSources)) {
+          for (const src of calc.formulaSources) {
+            const targetSet = this.verbrauchTargetsBySource.get(src) || new Set();
+            targetSet.add(calc.targetId);
+            this.verbrauchTargetsBySource.set(src, targetSet);
+          }
+        }
       }
     }
   }
@@ -339,12 +371,13 @@ class EmsAdapter extends utils.Adapter {
 
   async initializeEnergieTag(calc) {
     const sourceValue = this.readLast(calc.sourceId) || 0;
+    const processedValue = calc.invertValue ? -sourceValue : sourceValue;
     const currentOutState = await this.getForeignStateAsync(calc.targetId);
     const currentOut = currentOutState && Number.isFinite(Number(currentOutState.val)) ? Number(currentOutState.val) : 0;
 
-    let dayStartValue = sourceValue - currentOut;
+    let dayStartValue = processedValue - currentOut;
     if (!Number.isFinite(dayStartValue)) {
-      dayStartValue = sourceValue;
+      dayStartValue = processedValue;
     }
 
     this.energyDayStates.set(calc.id, {
@@ -352,7 +385,7 @@ class EmsAdapter extends utils.Adapter {
       dayStartValue
     });
 
-    const todayValue = Math.max(0, sourceValue - dayStartValue);
+    const todayValue = Math.max(0, processedValue - dayStartValue);
     await this.setForeignStateAsync(calc.targetId, {
       val: Number(todayValue.toFixed(3)),
       ack: true
@@ -392,6 +425,9 @@ class EmsAdapter extends utils.Adapter {
 
     const dtMs = Math.max(0, timestamp - state.lastTs);
     let powerForDelta = state.lastPower;
+    if (calc.invertValue) {
+      powerForDelta = -powerForDelta;
+    }
     if (calc.onlyPositive && powerForDelta < 0) {
       powerForDelta = 0;
     }
@@ -408,23 +444,28 @@ class EmsAdapter extends utils.Adapter {
   }
 
   async processEnergieTag(calc, sourceTotalEnergy) {
+    let processedValue = sourceTotalEnergy;
+    if (calc.invertValue) {
+      processedValue = -processedValue;
+    }
+
     let state = this.energyDayStates.get(calc.id);
     if (!state) {
       state = {
         dayKey: this.currentDayKey,
-        dayStartValue: sourceTotalEnergy
+        dayStartValue: processedValue
       };
       this.energyDayStates.set(calc.id, state);
     }
 
     if (state.dayKey !== this.currentDayKey) {
       state.dayKey = this.currentDayKey;
-      state.dayStartValue = sourceTotalEnergy;
+      state.dayStartValue = processedValue;
     }
 
-    let today = sourceTotalEnergy - state.dayStartValue;
+    let today = processedValue - state.dayStartValue;
     if (today < 0) {
-      state.dayStartValue = sourceTotalEnergy;
+      state.dayStartValue = processedValue;
       today = 0;
     }
 
@@ -515,41 +556,103 @@ class EmsAdapter extends utils.Adapter {
     return sum / covered;
   }
 
-  async recalculateVerbrauchTargetsForSource(sourceId) {
+  async recalculateVerbrauchForSources(sourceId) {
     const targetSet = this.verbrauchTargetsBySource.get(sourceId);
     if (!targetSet || targetSet.size === 0) {
       return;
     }
 
     for (const targetId of targetSet) {
-      await this.recalculateVerbrauchTarget(targetId);
+      await this.recalculateVerbrauch(targetId);
     }
   }
 
-  async recalculateAllVerbrauchTargets() {
+  async recalculateAllVerbrauch() {
     for (const targetId of this.verbrauchByTarget.keys()) {
-      await this.recalculateVerbrauchTarget(targetId);
+      await this.recalculateVerbrauch(targetId);
     }
   }
 
-  async recalculateVerbrauchTarget(targetId) {
-    const rows = this.verbrauchByTarget.get(targetId) || [];
-    let total = 0;
-
-    for (const row of rows) {
-      const value = this.readLast(row.sourceId);
-      if (value === null) {
-        continue;
-      }
-
-      const sign = row.verbrauchType === "producer" ? -1 : 1;
-      total += sign * value;
+  async recalculateVerbrauch(targetId) {
+    const calc = this.verbrauchByTarget.get(targetId);
+    if (!calc || calc.type !== TYPE_VERBRAUCH) {
+      return;
     }
 
+    const result = this.evaluateVerbrauchFormula(calc);
     await this.setForeignStateAsync(targetId, {
-      val: Number(total.toFixed(3)),
+      val: Number(result.toFixed(3)),
       ack: true
     });
+  }
+
+  evaluateVerbrauchFormula(calc) {
+    const sources = calc.formulaSources || [];
+    const ops = calc.formulaOps || [];
+
+    if (sources.length === 0) {
+      return 0;
+    }
+
+    let result = 0;
+    const firstVal = this.readLast(sources[0]);
+    if (firstVal !== null) {
+      result = firstVal;
+    }
+
+    for (let i = 1; i < sources.length; i++) {
+      const val = this.readLast(sources[i]);
+      if (val === null) {
+        continue;
+      }
+      const op = ops[i - 1] || "+";
+      if (op === "-") {
+        result -= val;
+      } else {
+        result += val;
+      }
+    }
+
+    return result;
+  }
+
+  parseVerbrauchFormula(formula) {
+    const sources = [];
+    const ops = [];
+    let currentId = "";
+    let firstSource = true;
+
+    for (let i = 0; i < formula.length; i++) {
+      const ch = formula[i];
+      if (ch === "+" || ch === "-") {
+        if (currentId.trim()) {
+          sources.push(currentId.trim());
+          if (!firstSource) {
+            ops.push(ch);
+          }
+          firstSource = false;
+        }
+        currentId = "";
+        if (ch === "-") {
+          ops.push("-");
+          firstSource = false;
+        }
+      } else if (ch === " ") {
+        if (currentId.trim()) {
+          sources.push(currentId.trim());
+          firstSource = false;
+        }
+        currentId = "";
+      } else {
+        currentId += ch;
+      }
+    }
+
+    if (currentId.trim()) {
+      sources.push(currentId.trim());
+    }
+
+    return { sources, ops };
   }
 
   async checkDailyReset() {
@@ -571,9 +674,10 @@ class EmsAdapter extends utils.Adapter {
         continue;
       }
 
+      const processedValue = calc.invertValue ? -sourceValue : sourceValue;
       this.energyDayStates.set(calc.id, {
         dayKey,
-        dayStartValue: sourceValue
+        dayStartValue: processedValue
       });
 
       await this.setForeignStateAsync(calc.targetId, {

@@ -4,7 +4,7 @@
   "items": {
     "info": {
       "type": "staticText",
-      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Fuer Typ Berechnung steht ein Formel-Editor (JSON-Array aus id/op-Termen) zur Verfuegung.",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Fuer Typ Berechnung kann eine Formel mit Objekt-IDs und Operatoren (z.B. +, -, *, /) eingetragen werden.",
       "newLine": true,
       "sm": 12
     },
@@ -113,13 +113,11 @@
           "hidden": "data.type === 'Berechnung'"
         },
         {
-          "type": "custom",
+          "type": "text",
           "attr": "berechnungFormula",
           "title": "Formel (Berechnung)",
           "width": "32%",
-          "url": "custom/customComponents.js",
-          "name": "EmsAdminSet/Components/FormulaEditor",
-          "bundlerType": "module",
+          "placeholder": "z.B. ems.0.grid + ems.0.battery - ems.0.pv",
           "validator": "data.type !== 'Berechnung' || !!(data.berechnungFormula || '').trim()",
           "validatorNoSaveOnError": true,
           "validatorErrorText": "Bitte fuer Berechnung eine gueltige Formel eingeben.",

@@ -4,7 +4,7 @@
   "items": {
     "info": {
       "type": "staticText",
-      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.X.calculated.<name> angelegt. Verbrauch-Formel: 'sourceId1 +/- sourceId2 +/- ...' (z.B. 'grid.power - pv.power + battery.power').",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Verbrauch-Formel: 'sourceId1 +/- sourceId2 +/- ...' (z.B. 'grid.power - pv.power + battery.power').",
       "newLine": true,
       "sm": 12
     },

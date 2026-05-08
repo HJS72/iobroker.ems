@@ -228,7 +228,7 @@ class EmsAdapter extends utils.Adapter {
       .replace(/_+/g, "_")
       .replace(/^_+/, "")
       .replace(/_+$/, "") || "calc";
-    return `${this.namespace}.calculated.${sanitized}`;
+    return `${this.namespace}.${sanitized}`;
   }
 
   indexCalculations() {

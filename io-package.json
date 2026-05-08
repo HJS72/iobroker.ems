@@ -48,22 +48,5 @@
     "calculations": []
   },
   "objects": [],
-  "instanceObjects": [
-    {
-      "_id": "calculated",
-      "type": "channel",
-      "common": {
-        "name": "Calculated values"
-      },
-      "native": {}
-    },
-    {
-      "_id": "calculated.dynamic",
-      "type": "channel",
-      "common": {
-        "name": "Dynamic calculations"
-      },
-      "native": {}
-    }
-  ]
+  "instanceObjects": []
 }

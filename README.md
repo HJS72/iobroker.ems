@@ -20,7 +20,7 @@ In der Tabelle `Berechnungen` stehen folgende Spalten zur Verfuegung:
 - `Berechnungsart`: `Energie`, `EnergieTag`, `Verbrauch`, `Durchschnitt`
 - `Quell-Datenpunkt`: bestehender State (Auswahl in der UI)
 - `Ziel-Datenpunktname`:
-  - Ohne Punkt (`mein_wert`) wird automatisch `ems.X.calculated.mein_wert` erstellt
+  - Ohne Punkt (`mein_wert`) wird automatisch `ems.0.mein_wert` erstellt
   - Mit Punkt (`0_userdata.0.xyz`) wird der volle Name direkt genutzt
 - `Typ (nur Verbrauch)`:
   - `Verbraucher (+)` addiert

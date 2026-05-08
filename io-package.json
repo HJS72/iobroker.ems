@@ -29,6 +29,7 @@
     "compact": true,
     "connectionType": "local",
     "dataSource": "poll",
+    "messagebox": true,
     "materialize": true,
     "enabled": true,
     "extIcon": "https://raw.githubusercontent.com/ioBroker/ioBroker.ems/master/admin/ems.png",

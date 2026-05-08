@@ -4,9 +4,62 @@
   "items": {
     "info": {
       "type": "staticText",
-      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Verbrauch-Formel: 'sourceId1 +/- sourceId2 +/- ...' (z.B. 'grid.power - pv.power + battery.power').",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Fuer Typ Berechnung steht ein Formel-Editor (JSON-Array aus id/op-Termen) zur Verfuegung.",
       "newLine": true,
       "sm": 12
+    },
+    "validateConfig": {
+      "type": "sendTo",
+      "label": "Konfiguration pruefen",
+      "adapter": "ems",
+      "command": "validateConfig",
+      "data": {
+        "calculationsJson": "${data._calculationsJson}"
+      },
+      "useNative": true,
+      "showProcess": true,
+      "variant": "contained",
+      "result": {
+        "en": "Configuration check successful",
+        "de": "Konfigurationspruefung erfolgreich"
+      },
+      "error": {
+        "en": "Configuration check failed",
+        "de": "Konfigurationspruefung fehlgeschlagen"
+      },
+      "newLine": true,
+      "sm": 4
+    },
+    "validationHint": {
+      "type": "staticText",
+      "text": "Nach jeder Aenderung bitte zuerst 'Konfiguration pruefen' ausfuehren. Speichern ist erst danach moeglich.",
+      "newLine": false,
+      "sm": 8
+    },
+    "_validationPassed": {
+      "type": "checkbox",
+      "hidden": true,
+      "default": false,
+      "validator": "data._validationPassed === true",
+      "validatorNoSaveOnError": true,
+      "validatorErrorText": "Bitte zuerst 'Konfiguration pruefen' ausfuehren.",
+      "onChange": {
+        "alsoDependsOn": [
+          "calculations"
+        ],
+        "calculateFunc": "return false"
+      }
+    },
+    "_calculationsJson": {
+      "type": "text",
+      "hidden": true,
+      "default": "[]",
+      "onChange": {
+        "alsoDependsOn": [
+          "calculations"
+        ],
+        "calculateFunc": "return JSON.stringify(data.calculations || [])"
+      }
     },
     "calculations": {
       "type": "table",
@@ -18,14 +71,14 @@
           "type": "checkbox",
           "attr": "enabled",
           "title": "Aktiv",
-          "width": "8%",
+          "width": "7%",
           "default": true
         },
         {
           "type": "select",
           "attr": "type",
           "title": "Berechnungsart",
-          "width": "12%",
+          "width": "11%",
           "options": [
             {
               "label": "Energie",
@@ -36,8 +89,8 @@
               "value": "EnergieTag"
             },
             {
-              "label": "Verbrauch",
-              "value": "Verbrauch"
+              "label": "Berechnung",
+              "value": "Berechnung"
             },
             {
               "label": "Durchschnitt",
@@ -50,51 +103,75 @@
           "type": "objectId",
           "attr": "sourceId",
           "title": "Quell-Datenpunkt",
-          "width": "18%",
-          "filter": {
-            "type": "state"
+          "width": "20%",
+          "customFilter": {
+            "type": "state",
+            "common": {
+              "type": "number"
+            }
           },
-          "showIf": "{type} !== 'Verbrauch'"
+          "hidden": "data.type === 'Berechnung'"
+        },
+        {
+          "type": "jsonEditor",
+          "attr": "berechnungTerms",
+          "title": "Formel-Editor (Berechnung)",
+          "width": "32%",
+          "help": "JSON-Array: [{\"id\":\"ems.0.grid\",\"op\":\"+\"},{\"id\":\"ems.0.pv\",\"op\":\"-\"}]",
+          "validator": "data.type !== 'Berechnung' || (Array.isArray(data.berechnungTerms) && data.berechnungTerms.length > 0)",
+          "validatorNoSaveOnError": true,
+          "validatorErrorText": "Bitte fuer Berechnung mindestens einen gueltigen Term im Formel-Editor angeben.",
+          "hidden": "data.type !== 'Berechnung'"
         },
         {
           "type": "text",
-          "attr": "verbrauchFormula",
-          "title": "Formel (Verbrauch)",
-          "width": "18%",
-          "placeholder": "source1 + source2 - source3",
-          "showIf": "{type} === 'Verbrauch'"
+          "attr": "berechnungFormula",
+          "hidden": true,
+          "onChange": {
+            "alsoDependsOn": [
+              "berechnungTerms"
+            ],
+            "calculateFunc": "if (!Array.isArray(data.berechnungTerms)) { return ''; } var out = ''; for (var i = 0; i < data.berechnungTerms.length; i++) { var t = data.berechnungTerms[i] || {}; var id = (t.id || '').toString().trim(); if (!id) { continue; } if (out) { out += ' ' + ((t.op === '-') ? '-' : '+') + ' '; } out += id; } return out;"
+          }
         },
         {
           "type": "text",
           "attr": "targetName",
           "title": "Ziel-Datenpunktname",
-          "width": "16%",
+          "width": "10%",
           "default": "my_calc"
+        },
+        {
+          "type": "text",
+          "attr": "unit",
+          "title": "Einheit",
+          "width": "6%",
+          "placeholder": "z.B. W, Wh, kWh"
         },
         {
           "type": "checkbox",
           "attr": "invertValue",
           "title": "Negative invertieren",
-          "width": "12%",
+          "width": "7%",
           "default": false,
-          "showIf": "{type} === 'Energie' || {type} === 'EnergieTag'"
+          "hidden": "data.type !== 'Energie' && data.type !== 'EnergieTag'"
         },
         {
           "type": "number",
           "attr": "averageSeconds",
           "title": "Fenster (Sek.)",
-          "width": "10%",
+          "width": "7%",
           "min": 1,
           "default": 300,
-          "showIf": "{type} === 'Durchschnitt'"
+          "hidden": "data.type !== 'Durchschnitt'"
         },
         {
           "type": "checkbox",
           "attr": "onlyPositive",
           "title": "Nur positive",
-          "width": "10%",
+          "width": "7%",
           "default": true,
-          "showIf": "{type} === 'Energie'"
+          "hidden": "data.type !== 'Energie'"
         }
       ]
     }

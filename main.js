@@ -4,7 +4,7 @@ const utils = require("@iobroker/adapter-core");
 
 const TYPE_ENERGIE = "Energie";
 const TYPE_ENERGIETAG = "EnergieTag";
-const TYPE_VERBRAUCH = "Verbrauch";
+const TYPE_BERECHNUNG = "Berechnung";
 const TYPE_DURCHSCHNITT = "Durchschnitt";
 
 class EmsAdapter extends utils.Adapter {
@@ -26,6 +26,7 @@ class EmsAdapter extends utils.Adapter {
     this.dayChangeInterval = null;
 
     this.on("ready", this.onReady.bind(this));
+    this.on("message", this.onMessage.bind(this));
     this.on("stateChange", this.onStateChange.bind(this));
     this.on("unload", this.onUnload.bind(this));
   }
@@ -92,6 +93,186 @@ class EmsAdapter extends utils.Adapter {
     await this.recalculateVerbrauchForSources(id);
   }
 
+  onMessage(obj) {
+    if (!obj || obj.command !== "validateConfig") {
+      return;
+    }
+    void this.handleValidateConfigMessage(obj);
+  }
+
+  async handleValidateConfigMessage(obj) {
+    const validation = await this.validateIncomingCalculations(obj && obj.message);
+
+    if (!obj.callback) {
+      return;
+    }
+
+    if (validation.ok) {
+      this.sendTo(obj.from, obj.command, {
+        native: {
+          _validationPassed: true
+        },
+        result: "ok"
+      }, obj.callback);
+      return;
+    }
+
+    this.sendTo(obj.from, obj.command, {
+      native: {
+        _validationPassed: false
+      },
+      error: validation.errors.join("\n")
+    }, obj.callback);
+  }
+
+  async validateIncomingCalculations(message) {
+    const rows = this.readCalculationsFromMessage(message);
+    const errors = [];
+
+    if (!rows.length) {
+      return {
+        ok: false,
+        errors: ["Keine Berechnungen zur Pruefung uebergeben"]
+      };
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.enabled === false) {
+        continue;
+      }
+
+      const rowNo = i + 1;
+      const type = this.normalizeType(row.type);
+      if (!type) {
+        errors.push(`Zeile ${rowNo}: ungueltige Berechnungsart`);
+        continue;
+      }
+
+      const targetName = typeof row.targetName === "string" ? row.targetName.trim() : "";
+      if (!targetName) {
+        errors.push(`Zeile ${rowNo}: Ziel-Datenpunktname fehlt`);
+      }
+
+      if (type === TYPE_BERECHNUNG) {
+        const formula = this.extractBerechnungFormula(row);
+        if (!formula) {
+          errors.push(`Zeile ${rowNo}: Formel fehlt`);
+          continue;
+        }
+
+        const parsed = this.parseBerechnungFormula(formula);
+        if (!parsed.sources.length) {
+          errors.push(`Zeile ${rowNo}: Formel enthaelt keine gueltigen Quellen`);
+          continue;
+        }
+
+        for (const sourceId of parsed.sources) {
+          const sourceErr = await this.validateSourceState(sourceId, rowNo);
+          if (sourceErr) {
+            errors.push(sourceErr);
+          }
+        }
+      } else {
+        const sourceId = typeof row.sourceId === "string" ? row.sourceId.trim() : "";
+        if (!sourceId) {
+          errors.push(`Zeile ${rowNo}: Quell-Datenpunkt fehlt`);
+          continue;
+        }
+
+        const sourceErr = await this.validateSourceState(sourceId, rowNo);
+        if (sourceErr) {
+          errors.push(sourceErr);
+        }
+      }
+
+      if (type === TYPE_DURCHSCHNITT) {
+        const averageSeconds = Number(row.averageSeconds);
+        if (!Number.isFinite(averageSeconds) || averageSeconds <= 0) {
+          errors.push(`Zeile ${rowNo}: Fenster (Sek.) muss groesser als 0 sein`);
+        }
+      }
+    }
+
+    return {
+      ok: errors.length === 0,
+      errors
+    };
+  }
+
+  readCalculationsFromMessage(message) {
+    if (!message) {
+      return [];
+    }
+
+    if (Array.isArray(message.calculations)) {
+      return message.calculations;
+    }
+
+    if (typeof message.calculationsJson === "string" && message.calculationsJson.trim()) {
+      try {
+        const parsed = JSON.parse(message.calculationsJson);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_error) {
+        return [];
+      }
+    }
+
+    return [];
+  }
+
+  extractBerechnungFormula(row) {
+    const fromNew = typeof row.berechnungFormula === "string" ? row.berechnungFormula.trim() : "";
+    if (fromNew) {
+      return fromNew;
+    }
+
+    const fromLegacy = typeof row.verbrauchFormula === "string" ? row.verbrauchFormula.trim() : "";
+    if (fromLegacy) {
+      return fromLegacy;
+    }
+
+    return this.buildFormulaFromTerms(row.berechnungTerms);
+  }
+
+  buildFormulaFromTerms(terms) {
+    if (!Array.isArray(terms)) {
+      return "";
+    }
+
+    let out = "";
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i] || {};
+      const id = String(term.id || "").trim();
+      if (!id) {
+        continue;
+      }
+
+      if (out) {
+        const op = term.op === "-" ? "-" : "+";
+        out += ` ${op} `;
+      }
+      out += id;
+    }
+
+    return out;
+  }
+
+  async validateSourceState(sourceId, rowNo) {
+    const obj = await this.getForeignObjectAsync(sourceId);
+    if (!obj) {
+      return `Zeile ${rowNo}: Datenpunkt ${sourceId} nicht gefunden`;
+    }
+    if (obj.type !== "state") {
+      return `Zeile ${rowNo}: Objekt ${sourceId} ist kein State`;
+    }
+    const commonType = obj.common && obj.common.type;
+    if (commonType !== "number") {
+      return `Zeile ${rowNo}: Datenpunkt ${sourceId} ist nicht numerisch`;
+    }
+    return "";
+  }
+
   getInputStateIds() {
     const ids = new Set();
     for (const calc of this.calculations) {
@@ -124,7 +305,7 @@ class EmsAdapter extends utils.Adapter {
       }
 
       const sourceId = typeof row.sourceId === "string" ? row.sourceId.trim() : "";
-      if (!sourceId && type !== TYPE_VERBRAUCH) {
+      if (!sourceId && type !== TYPE_BERECHNUNG) {
         this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: Quell-Datenpunkt fehlt`);
         continue;
       }
@@ -137,13 +318,13 @@ class EmsAdapter extends utils.Adapter {
 
       let calc;
 
-      if (type === TYPE_VERBRAUCH) {
-        const formula = typeof row.verbrauchFormula === "string" ? row.verbrauchFormula.trim() : "";
+      if (type === TYPE_BERECHNUNG) {
+        const formula = this.extractBerechnungFormula(row);
         if (!formula) {
-          this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: Verbrauch-Formel fehlt`);
+          this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: Formel fehlt`);
           continue;
         }
-        const parsed = this.parseVerbrauchFormula(formula);
+        const parsed = this.parseBerechnungFormula(formula);
         if (!parsed.sources || parsed.sources.length === 0) {
           this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: keine Quellen in Formel gefunden`);
           continue;
@@ -153,9 +334,10 @@ class EmsAdapter extends utils.Adapter {
           type,
           targetName,
           targetId: this.buildTargetStateId(targetName),
-          verbrauchFormula: formula,
+          berechnungFormula: formula,
           formulaSources: parsed.sources,
-          formulaOps: parsed.ops
+          formulaOps: parsed.ops,
+          unit: this.normalizeUnit(row.unit)
         };
       } else {
         calc = {
@@ -166,7 +348,8 @@ class EmsAdapter extends utils.Adapter {
           targetId: this.buildTargetStateId(targetName),
           onlyPositive: row.onlyPositive !== false,
           invertValue: row.invertValue === true,
-          averageSeconds: this.parsePositiveNumber(row.averageSeconds, 300)
+          averageSeconds: this.parsePositiveNumber(row.averageSeconds, 300),
+          unit: this.normalizeUnit(row.unit)
         };
       }
 
@@ -202,13 +385,17 @@ class EmsAdapter extends utils.Adapter {
     if (value === "energietag") {
       return TYPE_ENERGIETAG;
     }
-    if (value === "verbrauch") {
-      return TYPE_VERBRAUCH;
+    if (value === "verbrauch" || value === "berechnung") {
+      return TYPE_BERECHNUNG;
     }
     if (value === "durchschnitt") {
       return TYPE_DURCHSCHNITT;
     }
     return "";
+  }
+
+  normalizeUnit(value) {
+    return String(value || "").trim();
   }
 
   parsePositiveNumber(value, fallback) {
@@ -243,7 +430,7 @@ class EmsAdapter extends utils.Adapter {
         this.calcsBySource.set(calc.sourceId, bySource);
       }
 
-      if (calc.type === TYPE_VERBRAUCH) {
+      if (calc.type === TYPE_BERECHNUNG) {
         this.verbrauchByTarget.set(calc.targetId, calc);
         if (calc.formulaSources && Array.isArray(calc.formulaSources)) {
           for (const src of calc.formulaSources) {
@@ -265,8 +452,25 @@ class EmsAdapter extends utils.Adapter {
       seen.add(calc.targetId);
 
       const common = this.getCommonForType(calc.type, calc.targetName);
+      const unit = this.resolveUnitForType(calc);
+      if (unit) {
+        common.unit = unit;
+      }
       await this.ensureForeignState(calc.targetId, common);
     }
+  }
+
+  resolveUnitForType(calc) {
+    if (calc.unit) {
+      return calc.unit;
+    }
+    if (calc.type === TYPE_ENERGIE || calc.type === TYPE_ENERGIETAG) {
+      return "Wh";
+    }
+    if (calc.type === TYPE_BERECHNUNG) {
+      return "W";
+    }
+    return "";
   }
 
   getCommonForType(type, targetName) {
@@ -294,14 +498,13 @@ class EmsAdapter extends utils.Adapter {
       };
     }
 
-    if (type === TYPE_VERBRAUCH) {
+    if (type === TYPE_BERECHNUNG) {
       return {
         name: targetName,
         type: "number",
         role: "value.power",
         read: true,
         write: false,
-        unit: "W",
         def: 0
       };
     }
@@ -424,15 +627,21 @@ class EmsAdapter extends utils.Adapter {
     };
 
     const dtMs = Math.max(0, timestamp - state.lastTs);
-    let powerForDelta = state.lastPower;
+    let prevPower = state.lastPower;
+    let nextPower = sourceValue;
+
     if (calc.invertValue) {
-      powerForDelta = -powerForDelta;
-    }
-    if (calc.onlyPositive && powerForDelta < 0) {
-      powerForDelta = 0;
+      prevPower = -prevPower;
+      nextPower = -nextPower;
     }
 
-    state.energyWh += (powerForDelta * dtMs) / 3_600_000;
+    if (calc.onlyPositive) {
+      prevPower = Math.max(0, prevPower);
+      nextPower = Math.max(0, nextPower);
+    }
+
+    const avgPower = (prevPower + nextPower) / 2;
+    state.energyWh += (avgPower * dtMs) / 3_600_000;
     state.lastTs = timestamp;
     state.lastPower = sourceValue;
     this.energyStates.set(calc.id, state);
@@ -575,18 +784,18 @@ class EmsAdapter extends utils.Adapter {
 
   async recalculateVerbrauch(targetId) {
     const calc = this.verbrauchByTarget.get(targetId);
-    if (!calc || calc.type !== TYPE_VERBRAUCH) {
+    if (!calc || calc.type !== TYPE_BERECHNUNG) {
       return;
     }
 
-    const result = this.evaluateVerbrauchFormula(calc);
+    const result = this.evaluateBerechnungFormula(calc);
     await this.setForeignStateAsync(targetId, {
       val: Number(result.toFixed(3)),
       ack: true
     });
   }
 
-  evaluateVerbrauchFormula(calc) {
+  evaluateBerechnungFormula(calc) {
     const sources = calc.formulaSources || [];
     const ops = calc.formulaOps || [];
 
@@ -616,40 +825,24 @@ class EmsAdapter extends utils.Adapter {
     return result;
   }
 
-  parseVerbrauchFormula(formula) {
+  parseBerechnungFormula(formula) {
+    const compact = String(formula || "").replace(/\s+/g, "");
+    const tokens = compact.split(/([+-])/).filter((token) => token);
     const sources = [];
     const ops = [];
-    let currentId = "";
-    let firstSource = true;
+    let pendingOp = "+";
 
-    for (let i = 0; i < formula.length; i++) {
-      const ch = formula[i];
-      if (ch === "+" || ch === "-") {
-        if (currentId.trim()) {
-          sources.push(currentId.trim());
-          if (!firstSource) {
-            ops.push(ch);
-          }
-          firstSource = false;
-        }
-        currentId = "";
-        if (ch === "-") {
-          ops.push("-");
-          firstSource = false;
-        }
-      } else if (ch === " ") {
-        if (currentId.trim()) {
-          sources.push(currentId.trim());
-          firstSource = false;
-        }
-        currentId = "";
-      } else {
-        currentId += ch;
+    for (const token of tokens) {
+      if (token === "+" || token === "-") {
+        pendingOp = token;
+        continue;
       }
-    }
 
-    if (currentId.trim()) {
-      sources.push(currentId.trim());
+      sources.push(token);
+      if (sources.length > 1) {
+        ops.push(pendingOp);
+      }
+      pendingOp = "+";
     }
 
     return { sources, ops };

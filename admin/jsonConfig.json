@@ -4,7 +4,7 @@
   "items": {
     "info": {
       "type": "staticText",
-      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Fuer Typ Berechnung kann eine Formel mit Objekt-IDs und Operatoren (z.B. +, -, *, /) eingetragen werden.",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.0.<name> angelegt. Das Feld 'Formel' ist ein einfaches Texteingabefeld fuer Berechnung, z.B. ems.0.grid + ems.0.battery - ems.0.pv.",
       "newLine": true,
       "sm": 12
     },
@@ -103,25 +103,23 @@
           "type": "objectId",
           "attr": "sourceId",
           "title": "Quell-Datenpunkt",
-          "width": "20%",
+          "width": "18%",
           "customFilter": {
             "type": "state",
             "common": {
               "type": "number"
             }
-          },
-          "hidden": "data.type === 'Berechnung'"
+          }
         },
         {
           "type": "text",
           "attr": "berechnungFormula",
-          "title": "Formel (Berechnung)",
-          "width": "32%",
+          "title": "Formel",
+          "width": "34%",
           "placeholder": "z.B. ems.0.grid + ems.0.battery - ems.0.pv",
           "validator": "data.type !== 'Berechnung' || !!(data.berechnungFormula || '').trim()",
           "validatorNoSaveOnError": true,
-          "validatorErrorText": "Bitte fuer Berechnung eine gueltige Formel eingeben.",
-          "hidden": "data.type !== 'Berechnung'"
+          "validatorErrorText": "Bitte fuer Berechnung eine gueltige Formel eingeben."
         },
         {
           "type": "text",

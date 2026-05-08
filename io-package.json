@@ -1,0 +1,69 @@
+{
+  "common": {
+    "name": "ems",
+    "version": "0.1.0",
+    "news": {
+      "0.1.0": {
+        "en": "Added table based calculation admin UI (Energy, EnergyDay, Consumption, Average)",
+        "de": "Tabellenbasierte Berechnungs-Admin-UI hinzugefuegt (Energie, EnergieTag, Verbrauch, Durchschnitt)"
+      },
+      "0.0.1": {
+        "en": "Initial version"
+      }
+    },
+    "titleLang": {
+      "en": "EMS",
+      "de": "EMS"
+    },
+    "desc": {
+      "en": "Calculates house consumption and integrates energy from power values",
+      "de": "Berechnet Hausverbrauch und integriert Energie aus Leistungswerten"
+    },
+    "authors": [
+      "GitHub Copilot"
+    ],
+    "license": "MIT",
+    "platform": "Javascript/Node.js",
+    "mode": "daemon",
+    "type": "energy",
+    "compact": true,
+    "connectionType": "local",
+    "dataSource": "poll",
+    "materialize": true,
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/ioBroker/ioBroker.ems/master/admin/ems.png",
+    "icon": "ems.png",
+    "readme": "https://github.com/ioBroker/ioBroker.ems/blob/main/README.md",
+    "loglevel": "info",
+    "adminUI": {
+      "config": "json"
+    },
+    "dependencies": [
+      {
+        "js-controller": ">=5.0.0"
+      }
+    ]
+  },
+  "native": {
+    "calculations": []
+  },
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "calculated",
+      "type": "channel",
+      "common": {
+        "name": "Calculated values"
+      },
+      "native": {}
+    },
+    {
+      "_id": "calculated.dynamic",
+      "type": "channel",
+      "common": {
+        "name": "Dynamic calculations"
+      },
+      "native": {}
+    }
+  ]
+}

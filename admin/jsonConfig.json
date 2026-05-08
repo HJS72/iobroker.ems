@@ -1,0 +1,100 @@
+{
+  "i18n": true,
+  "type": "panel",
+  "items": {
+    "info": {
+      "type": "staticText",
+      "text": "Bestehende Datenpunkte als Quelle waehlen, Berechnungsart definieren und Ziel-Datenpunktname angeben. Zielname ohne Punkt wird automatisch unter ems.X.calculated.<name> angelegt.",
+      "newLine": true,
+      "sm": 12
+    },
+    "calculations": {
+      "type": "table",
+      "label": "Berechnungen",
+      "newLine": true,
+      "sm": 12,
+      "items": [
+        {
+          "type": "checkbox",
+          "attr": "enabled",
+          "title": "Aktiv",
+          "width": "8%",
+          "default": true
+        },
+        {
+          "type": "select",
+          "attr": "type",
+          "title": "Berechnungsart",
+          "width": "16%",
+          "options": [
+            {
+              "label": "Energie",
+              "value": "Energie"
+            },
+            {
+              "label": "EnergieTag",
+              "value": "EnergieTag"
+            },
+            {
+              "label": "Verbrauch",
+              "value": "Verbrauch"
+            },
+            {
+              "label": "Durchschnitt",
+              "value": "Durchschnitt"
+            }
+          ],
+          "default": "Energie"
+        },
+        {
+          "type": "objectId",
+          "attr": "sourceId",
+          "title": "Quell-Datenpunkt",
+          "width": "24%",
+          "filter": {
+            "type": "state"
+          }
+        },
+        {
+          "type": "text",
+          "attr": "targetName",
+          "title": "Ziel-Datenpunktname",
+          "width": "22%",
+          "default": "my_calc"
+        },
+        {
+          "type": "select",
+          "attr": "verbrauchType",
+          "title": "Typ (nur Verbrauch)",
+          "width": "14%",
+          "options": [
+            {
+              "label": "Verbraucher (+)",
+              "value": "consumer"
+            },
+            {
+              "label": "Erzeuger (-)",
+              "value": "producer"
+            }
+          ],
+          "default": "consumer"
+        },
+        {
+          "type": "number",
+          "attr": "averageSeconds",
+          "title": "Dauer Sek. (nur Durchschnitt)",
+          "width": "16%",
+          "min": 1,
+          "default": 300
+        },
+        {
+          "type": "checkbox",
+          "attr": "onlyPositive",
+          "title": "Nur positive Werte (Energie)",
+          "width": "16%",
+          "default": true
+        }
+      ]
+    }
+  }
+}

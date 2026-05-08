@@ -7,6 +7,8 @@ const TYPE_ENERGIETAG = "EnergieTag";
 const TYPE_BERECHNUNG = "Berechnung";
 const TYPE_DURCHSCHNITT = "Durchschnitt";
 
+const DEVICE_COUNT = 3;
+
 class EmsAdapter extends utils.Adapter {
   constructor(options = {}) {
     super({
@@ -33,6 +35,9 @@ class EmsAdapter extends utils.Adapter {
 
   async onReady() {
     this.log.info("EMS adapter gestartet");
+
+    await this.removeLegacyPlannerStates();
+    await this.ensureDeviceStates();
 
     this.calculations = this.parseCalculations();
     this.indexCalculations();
@@ -482,6 +487,64 @@ class EmsAdapter extends utils.Adapter {
         common.unit = unit;
       }
       await this.ensureForeignState(calc.targetId, common);
+    }
+  }
+
+  async ensureDeviceStates() {
+    for (let index = 0; index < DEVICE_COUNT; index++) {
+      const channelId = `${this.namespace}.device.${index}`;
+      await this.ensureForeignChannel(channelId, `Device ${index}`);
+
+      await this.ensureForeignState(`${channelId}.name`, {
+        name: "name",
+        role: "text",
+        type: "string",
+        read: true,
+        write: true,
+        def: ""
+      });
+
+      await this.ensureForeignState(`${channelId}.enabled`, {
+        name: "enabled",
+        role: "switch.enable",
+        type: "boolean",
+        read: true,
+        write: true,
+        def: false
+      });
+
+      await this.ensureForeignState(`${channelId}.windows`, {
+        name: "windows",
+        role: "json",
+        type: "string",
+        unit: "json",
+        read: true,
+        write: true,
+        def: "[]"
+      });
+    }
+  }
+
+  async removeLegacyPlannerStates() {
+    const legacyRootId = `${this.namespace}.planner`;
+    const legacyRoot = await this.getForeignObjectAsync(legacyRootId);
+    if (legacyRoot) {
+      await this.delForeignObjectAsync(legacyRootId, { recursive: true });
+      this.log.info("Legacy planner-Datenpunkte entfernt");
+    }
+  }
+
+  async ensureForeignChannel(id, name) {
+    const object = await this.getForeignObjectAsync(id);
+    if (!object) {
+      await this.setForeignObjectAsync(id, {
+        _id: id,
+        type: "channel",
+        common: {
+          name
+        },
+        native: {}
+      });
     }
   }
 

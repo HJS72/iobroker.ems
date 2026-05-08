@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.1.7",
+    "version": "0.2.0",
     "news": {
+      "0.2.0": {
+        "en": "Add generic device datapoints (device.0-2: name, enabled, windows) for external planner integration",
+        "de": "Generische Geraete-Datenpunkte (device.0-2: name, enabled, windows) fuer externe Planer-Integration hinzugefuegt"
+      },
       "0.1.7": {
         "en": "Improved configuration validation payload handling and block saving until config check succeeds",
         "de": "Validierungsdaten fuer die Konfigurationspruefung robuster verarbeitet und Speichern bis zur erfolgreichen Pruefung gesperrt"

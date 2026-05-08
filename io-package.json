@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.1.0",
+    "version": "0.1.7",
     "news": {
+      "0.1.7": {
+        "en": "Improved configuration validation payload handling and block saving until config check succeeds",
+        "de": "Validierungsdaten fuer die Konfigurationspruefung robuster verarbeitet und Speichern bis zur erfolgreichen Pruefung gesperrt"
+      },
       "0.1.0": {
         "en": "Added table based calculation admin UI (Energy, EnergyDay, Consumption, Average)",
         "de": "Tabellenbasierte Berechnungs-Admin-UI hinzugefuegt (Energie, EnergieTag, Verbrauch, Durchschnitt)"

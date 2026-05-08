@@ -205,16 +205,41 @@ class EmsAdapter extends utils.Adapter {
       return [];
     }
 
-    if (Array.isArray(message.calculations)) {
-      return message.calculations;
+    if (Array.isArray(message)) {
+      return message;
     }
 
-    if (typeof message.calculationsJson === "string" && message.calculationsJson.trim()) {
-      try {
-        const parsed = JSON.parse(message.calculationsJson);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (_error) {
-        return [];
+    const candidates = [message];
+    if (message && typeof message === "object" && message.native && typeof message.native === "object") {
+      candidates.push(message.native);
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== "object") {
+        continue;
+      }
+
+      if (Array.isArray(candidate.calculations)) {
+        return candidate.calculations;
+      }
+
+      if (Array.isArray(candidate.calculationsJson)) {
+        return candidate.calculationsJson;
+      }
+
+      const jsonCandidate = typeof candidate.calculationsJson === "string"
+        ? candidate.calculationsJson
+        : (typeof candidate._calculationsJson === "string" ? candidate._calculationsJson : "");
+
+      if (jsonCandidate.trim()) {
+        try {
+          const parsed = JSON.parse(jsonCandidate);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        } catch (_error) {
+          // ignore invalid JSON and continue trying alternative fields
+        }
       }
     }
 

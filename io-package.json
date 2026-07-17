@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "news": {
+      "0.2.5": {
+        "en": "Throttle repeated formula warnings and keep last valid output when formula evaluation is temporarily invalid",
+        "de": "Wiederholte Formel-Warnungen werden gedrosselt und bei temporaer ungueltiger Auswertung bleibt der letzte gueltige Ausgabewert erhalten"
+      },
       "0.2.4": {
         "en": "Fix formula evaluation for negative source values by wrapping substituted values in parentheses",
         "de": "Formelauswertung fuer negative Quellwerte korrigiert: ersetzte Werte werden in Klammern gesetzt"

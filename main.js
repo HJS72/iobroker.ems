@@ -24,6 +24,7 @@ class EmsAdapter extends utils.Adapter {
     this.energyStates = new Map();
     this.energyDayStates = new Map();
     this.averageStates = new Map();
+    this.formulaWarningTs = new Map();
     this.currentDayKey = this.getDayKey(new Date());
     this.dayChangeInterval = null;
 
@@ -885,6 +886,10 @@ class EmsAdapter extends utils.Adapter {
     }
 
     const result = this.evaluateBerechnungFormula(calc);
+    if (!Number.isFinite(result)) {
+      return;
+    }
+
     await this.setForeignStateAsync(targetId, {
       val: Number(result.toFixed(3)),
       ack: true
@@ -894,40 +899,62 @@ class EmsAdapter extends utils.Adapter {
   evaluateBerechnungFormula(calc) {
     const formula = String(calc.berechnungFormula || "").trim();
     if (!formula) {
-      return 0;
+      return null;
     }
 
     const sources = calc.formulaSources || [];
+    const missingSources = [];
 
     let expression = formula;
     const uniqueSources = Array.from(new Set(sources)).sort((a, b) => b.length - a.length);
     for (const sourceId of uniqueSources) {
       const sourceValue = this.readLast(sourceId);
+      if (!Number.isFinite(sourceValue)) {
+        missingSources.push(sourceId);
+      }
       const numericValue = Number.isFinite(sourceValue) ? sourceValue : 0;
       expression = this.replaceStateIdInFormula(expression, sourceId, `(${numericValue})`);
     }
 
+    if (missingSources.length > 0) {
+      this.logFormulaWarning(calc, "missing-sources", `Formel uebersprungen, Quellwerte fehlen: ${missingSources.join(", ")} | ${formula}`);
+      return null;
+    }
+
     const compactExpression = expression.replace(/\s+/g, "");
     if (!compactExpression || /[^0-9+\-*/().]/.test(compactExpression)) {
-      this.log.warn(`Formel konnte nicht ausgewertet werden: ${formula}`);
-      return 0;
+      this.logFormulaWarning(calc, "invalid-expression", `Formel konnte nicht ausgewertet werden: ${formula}`);
+      return null;
     }
 
     try {
       const result = Function(`"use strict"; return (${compactExpression});`)();
       if (result === Infinity || result === -Infinity) {
-        this.log.warn(`Formel enthaelt vermutlich eine Division durch 0: ${formula}`);
-        return 0;
+        this.logFormulaWarning(calc, "division-by-zero", `Formel enthaelt vermutlich eine Division durch 0: ${formula}`);
+        return null;
       }
       const numericResult = Number(result);
       if (!Number.isFinite(numericResult)) {
-        this.log.warn(`Formel lieferte keinen gueltigen Zahlenwert: ${formula}`);
-        return 0;
+        this.logFormulaWarning(calc, "invalid-result", `Formel lieferte keinen gueltigen Zahlenwert: ${formula}`);
+        return null;
       }
       return numericResult;
     } catch (error) {
-      this.log.warn(`Formel konnte nicht berechnet werden (${formula}): ${error.message}`);
-      return 0;
+      this.logFormulaWarning(calc, "calc-error", `Formel konnte nicht berechnet werden (${formula}): ${error.message}`);
+      return null;
+    }
+  }
+
+  logFormulaWarning(calc, reason, message) {
+    const targetId = calc && calc.targetId ? calc.targetId : "unknown";
+    const key = `${targetId}|${reason}`;
+    const now = Date.now();
+    const last = this.formulaWarningTs.get(key) || 0;
+    const cooldownMs = 300_000;
+
+    if (now - last >= cooldownMs) {
+      this.formulaWarningTs.set(key, now);
+      this.log.warn(message);
     }
   }
 

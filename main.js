@@ -904,7 +904,7 @@ class EmsAdapter extends utils.Adapter {
     for (const sourceId of uniqueSources) {
       const sourceValue = this.readLast(sourceId);
       const numericValue = Number.isFinite(sourceValue) ? sourceValue : 0;
-      expression = this.replaceStateIdInFormula(expression, sourceId, String(numericValue));
+      expression = this.replaceStateIdInFormula(expression, sourceId, `(${numericValue})`);
     }
 
     const compactExpression = expression.replace(/\s+/g, "");

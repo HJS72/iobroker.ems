@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "news": {
+      "0.2.4": {
+        "en": "Fix formula evaluation for negative source values by wrapping substituted values in parentheses",
+        "de": "Formelauswertung fuer negative Quellwerte korrigiert: ersetzte Werte werden in Klammern gesetzt"
+      },
       "0.2.3": {
         "en": "Fix formula parser for state IDs containing # and :",
         "de": "Formel-Parser fuer State-IDs mit # und : korrigiert"

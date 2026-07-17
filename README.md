@@ -41,7 +41,9 @@ In der Tabelle `Berechnungen` stehen folgende Spalten zur Verfuegung:
 
 - Berechnung:
 
-  `result = source1 +/- source2 +/- source3`
+  `result = (source1 - source2) / source1 * 100`
+
+  Erlaubte Operatoren: `+`, `-`, `*`, `/`, Klammern und numerische Konstanten.
 
 - Durchschnitt:
 

@@ -1,8 +1,12 @@
 {
   "common": {
     "name": "ems",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "news": {
+      "0.2.2": {
+        "en": "Berechnung formulas now support +, -, *, /, parentheses and constants; division by zero is handled safely",
+        "de": "Berechnungsformeln unterstuetzen jetzt +, -, *, /, Klammern und Konstanten; Division durch 0 wird sicher behandelt"
+      },
       "0.2.1": {
         "en": "Remove config validation gate, save button always active",
         "de": "Konfigurationspruefung entfernt, Speichern-Button immer aktiv"

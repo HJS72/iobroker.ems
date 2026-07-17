@@ -167,6 +167,10 @@ class EmsAdapter extends utils.Adapter {
         }
 
         const parsed = this.parseBerechnungFormula(formula);
+        if (!parsed.valid) {
+          errors.push(`Zeile ${rowNo}: Formel ist ungueltig (${parsed.error})`);
+          continue;
+        }
         if (!parsed.sources.length) {
           errors.push(`Zeile ${rowNo}: Formel enthaelt keine gueltigen Quellen`);
           continue;
@@ -355,6 +359,10 @@ class EmsAdapter extends utils.Adapter {
           continue;
         }
         const parsed = this.parseBerechnungFormula(formula);
+        if (!parsed.valid) {
+          this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: ungueltige Formel (${parsed.error})`);
+          continue;
+        }
         if (!parsed.sources || parsed.sources.length === 0) {
           this.log.warn(`Berechnung in Zeile ${i + 1} uebersprungen: keine Quellen in Formel gefunden`);
           continue;
@@ -884,56 +892,120 @@ class EmsAdapter extends utils.Adapter {
   }
 
   evaluateBerechnungFormula(calc) {
-    const sources = calc.formulaSources || [];
-    const ops = calc.formulaOps || [];
-
-    if (sources.length === 0) {
+    const formula = String(calc.berechnungFormula || "").trim();
+    if (!formula) {
       return 0;
     }
 
-    let result = 0;
-    const firstVal = this.readLast(sources[0]);
-    if (firstVal !== null) {
-      result = firstVal;
+    const sources = calc.formulaSources || [];
+
+    let expression = formula;
+    const uniqueSources = Array.from(new Set(sources)).sort((a, b) => b.length - a.length);
+    for (const sourceId of uniqueSources) {
+      const sourceValue = this.readLast(sourceId);
+      const numericValue = Number.isFinite(sourceValue) ? sourceValue : 0;
+      expression = this.replaceStateIdInFormula(expression, sourceId, String(numericValue));
     }
 
-    for (let i = 1; i < sources.length; i++) {
-      const val = this.readLast(sources[i]);
-      if (val === null) {
-        continue;
-      }
-      const op = ops[i - 1] || "+";
-      if (op === "-") {
-        result -= val;
-      } else {
-        result += val;
-      }
+    const compactExpression = expression.replace(/\s+/g, "");
+    if (!compactExpression || /[^0-9+\-*/().]/.test(compactExpression)) {
+      this.log.warn(`Formel konnte nicht ausgewertet werden: ${formula}`);
+      return 0;
     }
 
-    return result;
+    try {
+      const result = Function(`"use strict"; return (${compactExpression});`)();
+      if (result === Infinity || result === -Infinity) {
+        this.log.warn(`Formel enthaelt vermutlich eine Division durch 0: ${formula}`);
+        return 0;
+      }
+      const numericResult = Number(result);
+      if (!Number.isFinite(numericResult)) {
+        this.log.warn(`Formel lieferte keinen gueltigen Zahlenwert: ${formula}`);
+        return 0;
+      }
+      return numericResult;
+    } catch (error) {
+      this.log.warn(`Formel konnte nicht berechnet werden (${formula}): ${error.message}`);
+      return 0;
+    }
   }
 
   parseBerechnungFormula(formula) {
-    const compact = String(formula || "").replace(/\s+/g, "");
-    const tokens = compact.split(/([+-])/).filter((token) => token);
-    const sources = [];
-    const ops = [];
-    let pendingOp = "+";
-
-    for (const token of tokens) {
-      if (token === "+" || token === "-") {
-        pendingOp = token;
-        continue;
-      }
-
-      sources.push(token);
-      if (sources.length > 1) {
-        ops.push(pendingOp);
-      }
-      pendingOp = "+";
+    const raw = String(formula || "").trim();
+    if (!raw) {
+      return {
+        sources: [],
+        ops: [],
+        valid: false,
+        error: "leer"
+      };
     }
 
-    return { sources, ops };
+    const sourcePattern = /[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+/g;
+    const sourceMatches = raw.match(sourcePattern) || [];
+    const sources = Array.from(new Set(sourceMatches.filter((id) => /[A-Za-z_]/.test(id))));
+
+    let syntaxCheckExpr = raw;
+    const sortedSources = [...sources].sort((a, b) => b.length - a.length);
+    for (const sourceId of sortedSources) {
+      syntaxCheckExpr = this.replaceStateIdInFormula(syntaxCheckExpr, sourceId, "1");
+    }
+
+    const compact = syntaxCheckExpr.replace(/\s+/g, "");
+    if (!compact) {
+      return {
+        sources,
+        ops: [],
+        valid: false,
+        error: "kein Ausdruck"
+      };
+    }
+
+    if (/[^0-9+\-*/().]/.test(compact)) {
+      return {
+        sources,
+        ops: [],
+        valid: false,
+        error: "enthaelt ungueltige Zeichen"
+      };
+    }
+
+    try {
+      const testResult = Function(`"use strict"; return (${compact});`)();
+      if (!Number.isFinite(Number(testResult))) {
+        return {
+          sources,
+          ops: [],
+          valid: false,
+          error: "liefert keinen gueltigen Zahlenwert"
+        };
+      }
+    } catch (_error) {
+      return {
+        sources,
+        ops: [],
+        valid: false,
+        error: "Syntaxfehler"
+      };
+    }
+
+    return {
+      sources,
+      ops: [],
+      valid: true,
+      error: ""
+    };
+  }
+
+  replaceStateIdInFormula(formula, sourceId, replacement) {
+    if (!sourceId) {
+      return formula;
+    }
+
+    const escaped = sourceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_])(${escaped})(?=$|[^A-Za-z0-9_])`, "g");
+    return String(formula).replace(pattern, `$1${replacement}`);
   }
 
   async checkDailyReset() {

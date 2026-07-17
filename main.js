@@ -942,7 +942,7 @@ class EmsAdapter extends utils.Adapter {
       };
     }
 
-    const sourcePattern = /[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+/g;
+    const sourcePattern = /[A-Za-z0-9_:#-]+(?:\.[A-Za-z0-9_:#-]+)+/g;
     const sourceMatches = raw.match(sourcePattern) || [];
     const sources = Array.from(new Set(sourceMatches.filter((id) => /[A-Za-z_]/.test(id))));
 
@@ -1004,7 +1004,7 @@ class EmsAdapter extends utils.Adapter {
     }
 
     const escaped = sourceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`(^|[^A-Za-z0-9_])(${escaped})(?=$|[^A-Za-z0-9_])`, "g");
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_:#.-])(${escaped})(?=$|[^A-Za-z0-9_:#.-])`, "g");
     return String(formula).replace(pattern, `$1${replacement}`);
   }
 
